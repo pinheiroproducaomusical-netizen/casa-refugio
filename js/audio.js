@@ -77,7 +77,7 @@ var AUDIO = (function(){
     }
     if (t === 'bark') { // Marshal pants softly all the time
       var lp = ctx.createBufferSource(); lp.buffer = buffers.pant; lp.loop = true;
-      var lg = ctx.createGain(); lg.gain.value = 0.32; lp.connect(lg); lg.connect(s.lpf); lp.start(); s.loop = lp; s.loopGain = lg;
+      var lg = ctx.createGain(); lg.gain.value = 0; lp.connect(lg); lg.connect(s.lpf); lp.start(); s.loop = lp; s.loopGain = lg;
     }
     return s;
   }
@@ -118,6 +118,7 @@ var AUDIO = (function(){
       var f = s.o <= 0.01 ? 18000 : Math.max(500, 18000 * Math.pow(1 - s.o, 2.6));
       s.lpf.frequency.setTargetAtTime(f, ctx.currentTime, 0.05);
       s.gain.gain.setTargetAtTime(1 - s.o * 0.5, ctx.currentTime, 0.05);
+      if (s.loopGain) { var dx = s.cur[0] - L.x, dz = s.cur[2] - L.z, dd = Math.sqrt(dx * dx + dz * dz); s.loopGain.gain.setTargetAtTime(dd < 4.5 ? 0.18 * (1 - dd / 4.5) : 0, ctx.currentTime, 0.2); }
       if (s.t === 'bark' && s.mv) { s.clickT -= 0.03; if (s.clickT <= 0) { trigger(s, 'click', 0.5 + Math.random() * 0.4); s.clickT = 0.13 + Math.random() * 0.06; } }
     });
   }
@@ -158,12 +159,14 @@ var SYNTH = (function(){
         }
       });
     });
-    B.pant = buf(ctx, 1.2, function(d, sr){
-      var lp = 0, hp = 0, prev = 0;
+    // dog panting: short "hah" breaths through a vocal-tract-like resonance (not a constant hiss)
+    B.pant = buf(ctx, 1.0, function(d, sr){
+      var y1 = 0, y2 = 0, f = 1300, bw = 500, r = Math.exp(-Math.PI * bw / sr), c1 = 2 * r * Math.cos(2 * Math.PI * f / sr), c2 = -r * r;
       for (var i = 0; i < d.length; i++) {
-        var t = i / sr, c = (t % 0.3) / 0.3, env = Math.sin(Math.PI * c) * (Math.floor(t / 0.3) % 2 ? 0.7 : 1);
-        var nz = Math.random() * 2 - 1; lp += (nz - lp) * 0.25; hp = lp - prev; prev = lp;
-        d[i] = (lp * 0.6 + hp * 0.8) * env * 0.5;
+        var t = i / sr, ph = (t % 0.25) / 0.25, inhale = Math.floor(t / 0.25) % 2;
+        var env = ph < 0.45 ? Math.sin(Math.PI * ph / 0.45) : 0; env = Math.pow(env, 1.5) * (inhale ? 0.55 : 1);
+        var x = (Math.random() * 2 - 1) * env, y = x + c1 * y1 + c2 * y2; y2 = y1; y1 = y;
+        d[i] = y;
       }
     });
     B.click = buf(ctx, 0.02, function(d, sr){ for (var i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.002)); });
