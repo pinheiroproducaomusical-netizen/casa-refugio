@@ -1,10 +1,11 @@
 /* Phone controller */
 var PAD = (function(){
   function $(id){ return document.getElementById(id); }
-  var myId, code, mq = null, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
+  var myId, code, mq = null, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
   try { myId = localStorage.getItem('crId'); } catch (e) {}
   if (!myId) { myId = 'p' + Math.random().toString(36).slice(2, 9); try { localStorage.setItem('crId', myId); } catch (e) {} }
 
+  function buzz(p){ try { navigator.vibrate(p); } catch (e) {} }
   function show(id){ ['join', 'choose', 'ctl'].forEach(function(s){ $(s).style.display = s === id ? 'flex' : 'none'; }); }
   function status(t){ $('status').textContent = t; }
 
@@ -42,7 +43,7 @@ var PAD = (function(){
       var info = CHARS.info[id], b = document.createElement('button');
       b.className = 'charbtn'; b.dataset.ch = id; b.style.background = info.color;
       b.innerHTML = '<b>' + info.name + '</b>' + (info.perk ? '<small>' + info.perk + '</small>' : '');
-      b.onclick = function(){ if (b.disabled) return; ch = id; try { localStorage.setItem('crCh', id); } catch (e) {} show('ctl'); render(); };
+      b.onclick = function(){ if (b.disabled) return; buzz(12); ch = id; try { localStorage.setItem('crCh', id); } catch (e) {} show('ctl'); render(); };
       box.appendChild(b);
     });
   }
@@ -54,16 +55,18 @@ var PAD = (function(){
       if (d > max) { dx *= max / d; dy *= max / d; }
       knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; x = dx / max; y = dy / max;
     }
-    function rel(){ sid = null; x = y = 0; knob.style.transform = ''; }
-    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); }, { passive: false });
+    function rel(){ sid = null; x = y = 0; knob.style.transform = ''; zone = 0; }
+    setInterval(function(){ var z = Math.min(3, Math.floor(Math.sqrt(x * x + y * y) * 3.2)); if (z !== zone) { if (z > zone) buzz(z === 3 ? 18 : 8); zone = z; } }, 30);
+    setInterval(function(){ if (lastHt < 0.55) return; sniffT -= 0.1; if (sniffT <= 0) { buzz(lastHt > 0.8 ? 35 : 15); sniffT = lastHt > 0.8 ? 0.35 : 0.9; } }, 100);
+    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); buzz(10); }, { passive: false });
     stick.addEventListener('touchmove', function(e){ e.preventDefault(); for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) mv(e.changedTouches[i].clientX, e.changedTouches[i].clientY); }, { passive: false });
     stick.addEventListener('touchend', function(e){ for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) rel(); });
     stick.addEventListener('touchcancel', rel);
     var A = $('btnA');
-    A.addEventListener('touchstart', function(e){ e.preventDefault(); a = true; A.classList.add('down'); try { navigator.vibrate(15); } catch (err) {} }, { passive: false });
+    A.addEventListener('touchstart', function(e){ e.preventDefault(); a = true; A.classList.add('down'); buzz(22); }, { passive: false });
     function up(){ a = false; A.classList.remove('down'); }
     A.addEventListener('touchend', up); A.addEventListener('touchcancel', up);
-    $('startBtn').onclick = function(){ startN = 4; };
+    $('startBtn').onclick = function(){ startN = 4; buzz(12); };
     $('swapBtn').onclick = function(){ leaveN = 3; setTimeout(function(){ ch = null; show('choose'); }, 200); };
   }
 
@@ -90,6 +93,9 @@ var PAD = (function(){
     $('meScore').textContent = me ? me.sc + ' pts' : (ch ? 'entrando...' : '');
     if (me && me.sc > lastSc && lastSc >= 0) { try { navigator.vibrate([80, 60, 160]); } catch (e) {} }
     if (me) lastSc = me.sc;
+    if (me) { if (lastBp >= 0 && me.bp > lastBp) buzz(25); lastBp = me.bp; lastHt = me.ht || 0;
+      if (me.msg && me.msg.indexOf('Nada') === 0 && render._lastMsg !== me.msg) buzz([30, 50, 30]); render._lastMsg = me.msg; }
+    var nh = (state.hints || []).length; if (state.ph === 'round' && nh > lastHints) buzz([40, 40, 40]); lastHints = state.ph === 'round' ? nh : 0;
     if (ch && !me && taken[ch]) { ch = null; show('choose'); status('Esse personagem já foi escolhido.'); return; }
     var lobby = state.ph === 'lobby', end = state.ph === 'end';
     $('lobbyBtns').style.display = (lobby || end) ? 'flex' : 'none';

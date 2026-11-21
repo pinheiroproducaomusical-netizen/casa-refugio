@@ -53,16 +53,20 @@ var GAME = (function(){
     $('explore').style.display = 'block';
     function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown }; if (st > 0) { m.st = 1; st--; } onMsg('l', JSON.stringify(m)); }
     var xa = $('xA');
-    xa.addEventListener('touchstart', function(e){ e.preventDefault(); aDown = true; xa.classList.add('down'); }, { passive: false });
+    xa.addEventListener('touchstart', function(e){ e.preventDefault(); aDown = true; xa.classList.add('down'); try { navigator.vibrate(22); } catch (err) {} }, { passive: false });
     xa.addEventListener('touchend', function(){ aDown = false; xa.classList.remove('down'); });
     xa.addEventListener('mousedown', function(){ aDown = true; }); xa.addEventListener('mouseup', function(){ aDown = false; });
-    $('xstart').onclick = function(){ st = 2; };
+    $('xstart').onclick = function(){ st = 2; try { navigator.vibrate(12); } catch (e) {} };
     setInterval(function(){ $('xstart').style.display = (phase === 'lobby' || phase === 'end') ? 'block' : 'none'; $('xstart').textContent = phase === 'end' ? '▶ Jogar de novo' : '▶ Começar o jogo'; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
     send();
     setInterval(function(){ send(); }, 50);
     function mv(cx, cy){ var r = stick.getBoundingClientRect(), dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2), max = r.width / 2 - 20, d = Math.sqrt(dx * dx + dy * dy); if (d > max) { dx *= max / d; dy *= max / d; } knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; x = dx / max; y = dy / max; }
-    function rel(){ sid = null; x = y = 0; knob.style.transform = ''; }
-    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); }, { passive: false });
+    function rel(){ sid = null; x = y = 0; knob.style.transform = ''; zone = 0; }
+    var zone = 0;
+    setInterval(function(){ var z = Math.min(3, Math.floor(Math.sqrt(x * x + y * y) * 3.2)); if (z !== zone) { if (z > zone) { try { navigator.vibrate(z === 3 ? 18 : 8); } catch (e) {} } zone = z; } }, 30);
+    var sniffT = 0;
+    setInterval(function(){ var p = slots[0]; if (!p || p.ch !== 'marshal') return; var h = heatOf(p); if (h < 0.55) return; sniffT -= 0.1; if (sniffT <= 0) { try { navigator.vibrate(h > 0.8 ? 35 : 15); } catch (e) {} sniffT = h > 0.8 ? 0.35 : 0.9; } }, 100);
+    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); try { navigator.vibrate(10); } catch (err) {} }, { passive: false });
     stick.addEventListener('touchmove', function(e){ e.preventDefault(); for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) mv(e.changedTouches[i].clientX, e.changedTouches[i].clientY); }, { passive: false });
     stick.addEventListener('touchend', rel); stick.addEventListener('touchcancel', rel);
     var down = false;
@@ -70,6 +74,7 @@ var GAME = (function(){
     addEventListener('mousemove', function(e){ if (down) mv(e.clientX, e.clientY); });
     addEventListener('mouseup', function(){ if (down) { down = false; rel(); } });
     $('xchar').onclick = function(){
+      try { navigator.vibrate(12); } catch (e) {}
       var p = slots[0]; chIdx = (chIdx + 1) % CHARS.list.length;
       if (p) { setChar(p, CHARS.list[chIdx]); p.camInit = false; }
       $('xchar').textContent = '👤 ' + CHARS.info[CHARS.list[chIdx]].name;
@@ -113,7 +118,7 @@ var GAME = (function(){
     lastPub = now; dirty = false;
     var st = { ph: phase, r: round, R: ROUNDS, pl: [], hints: [], pg: pongs };
     pongs = {};
-    slots.forEach(function(p){ if (p) st.pl.push({ id: p.id, ch: p.ch, sc: p.score, near: p.nearSpot ? p.nearSpot.name : '', msg: p.msgT > 0 ? p.msg : '' }); });
+    slots.forEach(function(p){ if (p) st.pl.push({ id: p.id, ch: p.ch, sc: p.score, near: p.nearSpot ? p.nearSpot.name : '', msg: p.msgT > 0 ? p.msg : '', bp: p.bump || 0, ht: p.ch === 'marshal' ? Math.round(heatOf(p) * 100) / 100 : 0 }); });
     if (cur && phase !== 'lobby') { st.obj = house.items[cur.item].name; st.hints = cur.hints.slice(0, hintCount()); }
     if (phase === 'found' && foundBy) st.found = foundBy;
     if (phase === 'end') st.win = winnerText();
@@ -153,8 +158,11 @@ var GAME = (function(){
     var sp = -ty * p.info.speed; if (sp < 0) sp *= 0.5;
     if (p.searchT > 0) sp = 0;
     var dx = Math.cos(p.ang) * sp * dt, dz = Math.sin(p.ang) * sp * dt, baby = p.ch === 'joao';
-    if (!blocked(p.x + dx, p.z, p.r, baby)) p.x += dx;
-    if (!blocked(p.x, p.z + dz, p.r, baby)) p.z += dz;
+    var hit = false;
+    if (!blocked(p.x + dx, p.z, p.r, baby)) p.x += dx; else if (Math.abs(dx) > 0.001) hit = true;
+    if (!blocked(p.x, p.z + dz, p.r, baby)) p.z += dz; else if (Math.abs(dz) > 0.001) hit = true;
+    p.bumpT = (p.bumpT || 0) - dt;
+    if (hit && p.bumpT <= 0) { p.bump = (p.bump || 0) + 1; p.bumpT = 0.5; dirty = true; buzz(p, 25); }
     p.speedNow = Math.abs(sp) / p.info.speed;
     var m = p.model.root; m.position.set(p.x, 0, p.z); m.rotation.y = -p.ang + Math.PI / 2;
     p.model.animate(dt, p.speedNow + (p.searchT > 0 ? 0.6 : 0));
@@ -171,23 +179,25 @@ var GAME = (function(){
       p.searchT -= dt;
       if (p.searchT <= 0 && phase === 'round') {
         if (p.searching.id === cur.spot) found(p);
-        else say(p, 'Nada ' + p.searching.name + '...', 1.8);
+        else { say(p, 'Nada ' + p.searching.name + '...', 1.8); buzz(p, [30, 50, 30]); }
       }
     }
-    // camera follow with wall avoidance
+    // camera: rigidly behind the character (no lag when walking backwards); only the angle is smoothed,
+    // and it moves in quickly when a wall is behind, then eases back out slowly.
     var dist = p.info.kind === 'adult' ? 2.3 : 1.7, hgt = p.info.cam + 0.45;
-    var fx = Math.cos(p.ang), fz = Math.sin(p.ang);
-    var want = dist, step = 0.08;
-    for (var t = 0.3; t <= dist; t += step) { if (wallAt(p.x - fx * t, p.z - fz * t)) { want = Math.max(0.25, t - 0.15); break; } }
-    var tx2 = p.x - fx * want, tz2 = p.z - fz * want, ty2 = hgt + (dist - want) * 0.25;
-    if (tz2 > 6.45 || p.z > 6.45) ty2 = Math.min(ty2, 2.45);
-    if (!p.camInit) { p.cx = tx2; p.cy = ty2; p.cz = tz2; p.camInit = true; }
-    var k = Math.min(1, dt * 7);
-    p.cx += (tx2 - p.cx) * k; p.cy += (ty2 - p.cy) * k; p.cz += (tz2 - p.cz) * k;
-    p.cam.position.set(p.cx, p.cy, p.cz);
+    if (!p.camInit) { p.camAng = p.ang; p.camDist = dist; p.camInit = true; }
+    var da = p.ang - p.camAng; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    p.camAng += da * Math.min(1, dt * 8);
+    var fx = Math.cos(p.camAng), fz = Math.sin(p.camAng), want = dist;
+    for (var t = 0.3; t <= dist; t += 0.08) { if (wallAt(p.x - fx * t, p.z - fz * t)) { want = Math.max(0.3, t - 0.15); break; } }
+    p.camDist += (want - p.camDist) * Math.min(1, dt * (want < p.camDist ? 14 : 2));
+    var cy = hgt; if (p.z - fz * p.camDist > 6.45 || p.z > 6.45) cy = Math.min(cy, 2.45);
+    p.cam.position.set(p.x - fx * p.camDist, cy, p.z - fz * p.camDist);
     p.cam.lookAt(p.x + fx * 1.2, p.info.cam * 0.8, p.z + fz * 1.2);
   }
   function say(p, text, sec){ p.msg = text; p.msgT = sec; dirty = true; }
+  function buzz(p, pat){ if (explore && p.id === 'me') { try { navigator.vibrate(pat); } catch (e) {} } }
+  function heatOf(p){ if (!cur || phase !== 'round') return 0; var sp = spotById(cur.spot), d = Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z)); return clamp(1 - d / 12, 0, 1); }
 
   /* ---------------- game flow ---------------- */
   function startGame(){
@@ -211,7 +221,7 @@ var GAME = (function(){
     var it = house.items[cur.item], sp = spotById(cur.spot);
     it.obj.visible = true; it.obj.position.set(sp.x, 1.3, sp.z);
     foundBy = p.info.name + ' achou ' + it.name + ' ' + sp.name + '!';
-    slots.forEach(function(q){ if (q) say(q, q === p ? 'Você achou! +1 ponto' : foundBy, 6); });
+    slots.forEach(function(q){ if (q) { say(q, q === p ? 'Você achou! +1 ponto' : foundBy, 6); buzz(q, q === p ? [80, 60, 160] : [40]); } });
     dirty = true; drawTvScreen();
   }
   function restoreItem(){
@@ -313,7 +323,7 @@ var GAME = (function(){
       if (fps < 28 && scale > 0.5 && !/hq/.test(location.search)) { lowT++; if (lowT >= 3) { scale = Math.max(0.5, scale - 0.1); resize(); lowT = 0; } } else lowT = 0; }
     // drop players that went silent
     slots.forEach(function(p){ if (p && now - p.seen > 20000) removePlayer(p); });
-    if (phase === 'round') { var hc = hintCount(); roundT += dt; if (hintCount() !== hc) dirty = true; }
+    if (phase === 'round') { var hc = hintCount(); roundT += dt; if (hintCount() !== hc) { dirty = true; slots.forEach(function(q){ if (q) buzz(q, [40, 40, 40]); }); } }
     if (phase === 'found') { phaseT += dt; var it = house.items[cur.item].obj; it.rotation.y += dt * 2; if (phaseT > 6) nextRound(); }
     var active = slots.filter(Boolean);
     active.forEach(function(p){ updatePlayer(p, dt); });
