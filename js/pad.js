@@ -16,6 +16,7 @@ var PAD = (function(){
     $('joinBtn').onclick = join;
     buildChooser();
     buildControls();
+    if (window.JOIN_CODE) { $('codeIn').value = window.JOIN_CODE; join(); }
   }
 
   function join(){

@@ -25,6 +25,17 @@
   .bigcode{font-size:13vh;font-weight:bold;letter-spacing:2vw;color:#ffd166;margin:1vh 0}
   .lobby .who{font-size:3.2vh;margin-top:2vh;font-weight:bold}
   .lmsg{color:#ff8a80;font-size:2.4vh}
+  .home{display:flex;height:100%}
+  .home .left{flex:1;padding-right:2vw;overflow:hidden}
+  .home .right{width:42%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .home .qr{background:#fff;padding:1.2vh;border-radius:1.4vh;width:34vh;height:34vh}
+  .home .qr canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
+  .home .scan{font-size:2.8vh;font-weight:bold;margin:1.6vh 0 .6vh}
+  .home .alt{font-size:1.9vh;opacity:.75;line-height:1.4}
+  .home .codebox{font-size:6vh;font-weight:bold;letter-spacing:.8vw;color:#ffd166}
+  .home .desc{font-size:2.3vh;line-height:1.45;margin:1.2vh 0}
+  .home .desc b{color:#ffd166}
+  .compact .home .qr{width:22vh;height:22vh}.compact .home .desc{display:none}
   .round{font-size:2.2vh;opacity:.7}
   .missing{font-size:4.4vh;font-weight:bold;color:#ffd166;margin:.6vh 0 1.4vh}
   .hint{font-size:2.6vh;line-height:1.35;margin:1vh 0;padding:1vh 1vw;background:rgba(255,255,255,.08);border-radius:1vh}
@@ -92,12 +103,12 @@
 <body>
 <div id="status"></div>
 
-<div id="menu">
+<div id="menu" style="display:none">
   <h1>Casa Refúgio</h1>
-  <p>caça ao tesouro</p>
-  <button class="big" id="goTV" autofocus>📺 Esta é a TV</button>
-  <button class="big" id="goPad">📱 Sou um controle</button>
-  <button class="big" id="goX" style="background:#555">🏠 Explorar a casa</button>
+  <p>caça ao tesouro em 3D</p>
+  <button class="big" id="goPad">📱 Entrar no jogo da TV</button>
+  <button class="big" id="goX" style="background:#e0883d">🏠 Jogar sozinho no celular</button>
+  <button class="big" id="goTV" style="background:#444;font-size:18px;padding:12px 20px">📺 Esta tela é a TV</button>
 </div>
 
 <div id="tv" style="display:none"></div>
@@ -137,27 +148,33 @@
 </div>
 
 <script src="lib/three.min.js"></script>
-<script src="js/net.js?v=10"></script>
-<script src="js/tex.js?v=10"></script>
-<script src="js/chars.js?v=10"></script>
-<script src="js/data.js?v=10"></script>
-<script src="js/house.js?v=10"></script>
-<script src="js/game.js?v=10"></script>
-<script src="js/audio.js?v=10"></script>
-<script src="js/pad.js?v=10"></script>
+<script src="lib/qrcode.js"></script>
+<script src="js/net.js?v=11"></script>
+<script src="js/tex.js?v=11"></script>
+<script src="js/chars.js?v=11"></script>
+<script src="js/data.js?v=11"></script>
+<script src="js/house.js?v=11"></script>
+<script src="js/game.js?v=11"></script>
+<script src="js/audio.js?v=11"></script>
+<script src="js/pad.js?v=11"></script>
 <script>
+  var VERSION = 11;
   var started = false;
   function go(mode){
     if (started) return; started = true;
-    try { location.hash = mode; } catch (e) {}
+    try { if (mode !== 'tv') location.hash = mode; } catch (e) {}
     document.getElementById('menu').style.display = 'none';
     if (mode === 'tv' || mode === 'explorar') { document.getElementById('hud').style.display = 'block'; GAME.start({ explore: mode === 'explorar' }); } else PAD.start();
   }
   document.getElementById('goTV').onclick = function(){ go('tv'); };
   document.getElementById('goPad').onclick = function(){ go('pad'); };
   document.getElementById('goX').onclick = function(){ go('explorar'); };
-  if (location.hash === '#tv') go('tv'); else if (location.hash === '#pad') go('pad'); else if (location.hash === '#explorar') go('explorar');
-  else { try { document.getElementById('goTV').focus(); } catch (e) {} }
+  var ua = navigator.userAgent, isTV = /SMART-TV|SmartTV|Tizen|Web0S|webOS|BRAVIA|AFT|CrKey|HbbTV/i.test(ua), isPhone = !isTV && /Android|iPhone|iPad|Mobile/i.test(ua);
+  var h = location.hash;
+  if (/^#j\d{4}$/.test(h)) { window.JOIN_CODE = h.slice(2); go('pad'); }      // came from the TV's QR code
+  else if (h === '#tv') go('tv'); else if (h === '#pad') go('pad'); else if (h === '#explorar') go('explorar');
+  else if (isPhone) document.getElementById('menu').style.display = 'flex';    // phone opened the plain link
+  else go('tv');                                                                // TV / computer: home page with QR code
 </script>
 </body>
 </html>

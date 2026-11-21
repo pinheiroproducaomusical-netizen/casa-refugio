@@ -44,7 +44,7 @@ var GAME = (function(){
       if (!m) { hud.code.textContent = 'Sem conexão'; hud.lobbyMsg.textContent = 'Não consegui conectar ao servidor. Verifique a internet da TV e recarregue.'; return; }
       mq = m; code = String(idx + 1) + String(Math.floor(100 + Math.random() * 900));
       mq.sub('casarefugio/' + code + '/pad');
-      hud.code.textContent = code; dirty = true; drawTvScreen();
+      hud.code.textContent = code; dirty = true; drawTvScreen(); drawQR();
     }, function(){ hud.lobbyMsg.textContent = 'Conexão perdida — recarregue a página da TV.'; });
     requestAnimationFrame(loop);
   }
@@ -415,15 +415,29 @@ var GAME = (function(){
   function buildHud(){
     var h = $('hud');
     hud.lobby = el('div', 'panel lobby', h);
-    hud.lobby.innerHTML = '<div class="title">Casa Refúgio <span>caça ao tesouro</span></div>' +
-      '<div class="step">1. No celular, abra <b>pinheiroproducaomusical-netizen.github.io/casa-refugio</b></div>' +
-      '<div class="step">2. Toque em <b>Sou um controle</b> e digite o código:</div>' +
-      '<div class="bigcode" id="hcode">----</div><div class="step">3. Escolha seu personagem. Quando todos entrarem, escolha o jogo no celular: <b>🔎 Sumiu!</b> ou <b>🐶 Cadê o Marshal?</b></div><div class="lmsg" id="lmsg"></div>';
+    hud.lobby.innerHTML = '<div class="home"><div class="left">' +
+      '<div class="title">Casa Refúgio <span>caça ao tesouro em 3D</span></div>' +
+      '<div class="desc">Até 3 jogadores, cada um com sua tela, usando o celular como controle.</div>' +
+      '<div class="desc"><b>🔎 Sumiu!</b> Um objeto da casa desaparece. Siga as dicas de música, enfermagem, aves e conhecimentos gerais e procure antes do tempo acabar.</div>' +
+      '<div class="desc"><b>🐶 Cadê o Marshal?</b> O Marshal se esconde e fica indo e vindo pela casa. Siga os cocôs e os latidos (com fone de ouvido!) e pegue ele.</div>' +
+      '<div class="desc">Quando todos entrarem, escolham o jogo no celular.</div>' +
+      '<div class="lmsg" id="lmsg"></div></div>' +
+      '<div class="right"><div class="qr" id="hqr"></div><div class="scan">📷 Aponte a câmera do celular</div>' +
+      '<div class="alt">ou abra <b>pinheiroproducaomusical-netizen.github.io/casa-refugio</b><br>e digite o código</div><div class="codebox" id="hcode">----</div></div></div>';
     hud.code = $('hcode'); hud.lobbyMsg = $('lmsg');
     hud.panel = el('div', 'panel game', h);
     hud.views = [0, 1, 2].map(function(){ var v = el('div', 'view', h); v.innerHTML = '<div class="vname"></div><div class="vmsg"></div><div class="vprompt"></div><div class="sniff"><div class="sbar"></div><span></span></div>'; return v; });
     hud.small = el('div', 'smallcode', h);
     hud.fps = el('div', 'fps', h);
+  }
+  function drawQR(){
+    var box = $('hqr'); if (!box || !window.QRCodeLib) return;
+    var url = location.origin + location.pathname + '?v=' + (window.VERSION || 1) + '#j' + code;
+    var q = new QRCodeLib(-1, QRErrorCorrectLevel.M); q.addData(url); q.make();
+    var n = q.getModuleCount(), px = 8, pad = 2, c = document.createElement('canvas'); c.width = c.height = (n + pad * 2) * px;
+    var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#000';
+    for (var r = 0; r < n; r++) for (var k = 0; k < n; k++) if (q.isDark(r, k)) g.fillRect((k + pad) * px, (r + pad) * px, px, px);
+    box.innerHTML = ''; box.appendChild(c);
   }
   function layout(n){
     var W = innerWidth, H = innerHeight;
@@ -439,9 +453,10 @@ var GAME = (function(){
     hud.panel.style.display = lobby ? 'none' : 'block';
     hud.small.textContent = code ? 'código ' + code : '';
     if (explore) { hud.panel.style.display = lobby ? 'none' : 'block'; var pw = innerWidth > innerHeight; place(hud.panel, pw ? [innerWidth * 0.55, 0, innerWidth * 0.45, innerHeight * 0.62] : [0, 0, innerWidth, innerHeight * 0.36]); hud.panel.style.background = 'rgba(15,20,28,.72)'; hud.panel.className = 'panel game solo'; }
-    var pr = L.panel; place(hud.panel, pr); place(hud.lobby, active.length ? pr : [innerWidth * 0.15, innerHeight * 0.1, innerWidth * 0.7, innerHeight * 0.8]);
+    var pr = L.panel; place(hud.panel, pr); place(hud.lobby, active.length ? pr : [innerWidth * 0.08, innerHeight * 0.1, innerWidth * 0.84, innerHeight * 0.8]);
+    hud.lobby.className = 'panel lobby' + (active.length ? ' compact' : '');
     if (lobby) {
-      if (active.length && !hud.lobby.querySelector('.who')) el('div', 'who', hud.lobby);
+      if (active.length && !hud.lobby.querySelector('.who')) el('div', 'who', hud.lobby.querySelector('.left'));
       var who = hud.lobby.querySelector('.who'); if (who) who.innerHTML = active.map(function(p){ return '<span style="color:' + p.info.color + '">● ' + p.info.name + '</span>'; }).join(' &nbsp; ');
     } else {
       var html = '';
@@ -517,7 +532,7 @@ var GAME = (function(){
     renderer.setScissorTest(true);
     if (!active.length) { // attract mode: slow orbit
       var cam = GAME._attract || (GAME._attract = new THREE.PerspectiveCamera(60, 1, 0.1, 150));
-      var a = now / 9000; cam.position.set(9 + Math.cos(a) * 4, 2.3, 3.2 + Math.sin(a) * 1.8); cam.lookAt(8, 1.3, 5);
+      var a = now / 9000; cam.position.set(10.8 + Math.cos(a) * 2.4, 2.6, 2.7 + Math.sin(a) * 1.1); cam.lookAt(7, 1.2, 6.5);
       renderView(cam, [0, 0, W, H], null);
     }
     active.forEach(function(p, i){ renderView(p.cam, L.views[i], p); });
@@ -536,5 +551,5 @@ var GAME = (function(){
     renderer.render(scene, cam);
   }
 
-  return { start: start, _msg: onMsg, _slots: function(){ return slots; }, _phase: function(){ return phase; }, _cur: function(){ return cur; }, _house: function(){ return house; }, _info: function(){ return renderer.info; }, _npc: function(){ return npc; }, _poos: function(){ return poos; } };
+  return { start: start, _msg: onMsg, _slots: function(){ return slots; }, _phase: function(){ return phase; }, _cur: function(){ return cur; }, _house: function(){ return house; }, _info: function(){ return renderer.info; }, _npc: function(){ return npc; }, _fakeCode: function(c){ code = c; hud.code.textContent = c; drawQR(); }, _poos: function(){ return poos; } };
 })();
