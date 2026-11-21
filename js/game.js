@@ -64,6 +64,9 @@ var GAME = (function(){
     var gm = 'sumiu';
     $('xstart1').onclick = function(){ gm = 'sumiu'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
     $('xstart2').onclick = function(){ gm = 'marshal'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    $('xstart3').onclick = function(){ gm = 'aves'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    $('xhear').onclick = function(){ AUDIO.init(); if (cur && cur.sp) AUDIO.preview(cur.sp); };
+    setInterval(function(){ $('xhear').style.display = mode === 'aves' && phase === 'round' ? 'block' : 'none'; }, 300);
     setInterval(function(){ var show = (phase === 'lobby' || phase === 'end') ? 'block' : 'none'; $('xstarts').style.display = show; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
     send();
     setInterval(function(){ send(); }, 50);
@@ -113,7 +116,7 @@ var GAME = (function(){
     p.ix = clamp(+d.x || 0, -1, 1); p.iy = clamp(+d.y || 0, -1, 1);
     var a = !!d.a; if (a && !p.a) p.press = true; p.a = a;
     var j = !!d.j; if (j && !p.j) p.jump = true; p.j = j;
-    if (d.st && (phase === 'lobby' || phase === 'end')) startGame(d.gm === 'marshal' ? 'marshal' : 'sumiu');
+    if (d.st && (phase === 'lobby' || phase === 'end')) startGame(d.gm === 'marshal' || d.gm === 'aves' ? d.gm : 'sumiu');
     if (d.lv) { removePlayer(p); return; }
     if (d.t) pongs[d.id] = d.t;
   }
@@ -123,17 +126,19 @@ var GAME = (function(){
 
   function publish(now){
     if (!mq || !code) return;
-    var fast = mode === 'marshal' && phase === 'round';
+    var fast = (mode === 'marshal' || mode === 'aves') && phase !== 'lobby';
     if (!dirty && now - lastPub < (fast ? 120 : 250)) return;
     lastPub = now; dirty = false;
     var st = { ph: phase, gm: mode, r: round, R: ROUNDS, pl: [], hints: [], pg: pongs, tl: phase === 'round' ? Math.max(0, Math.ceil(ROUND_TIME - roundT)) : 0 };
     pongs = {};
     slots.forEach(function(p){ if (p) st.pl.push({ id: p.id, ch: p.ch, sc: p.score, near: p.nearSpot ? p.nearSpot.name : '', msg: p.msgT > 0 ? p.msg : '', bp: p.bump || 0, ht: p.ch === 'marshal' && mode === 'sumiu' ? Math.round(heatOf(p) * 100) / 100 : 0,
-      nd: p.nearDog ? 1 : 0, px: r2(p.x), pz: r2(p.z), pa: r2(p.ang), oc: npc && mode === 'marshal' ? (occluded(p.x, p.z, npc.x, npc.z) ? 1 : 0) : 0 }); });
+      nd: p.nearDog ? 1 : 0, px: r2(p.x), pz: r2(p.z), pa: r2(p.ang), py: r2(earY(p)),
+      au: (mode === 'marshal' || mode === 'aves') && phase !== 'lobby' && phase !== 'end' ? audioSourcesFor(p).map(function(e){ return [e.id, e.t, r2(e.x), r2(e.y), r2(e.z), e.o, e.n, e.mv]; }) : [] }); });
     if (npc && mode === 'marshal') { st.mx = r2(npc.x); st.mz = r2(npc.z); st.bk = barkN; }
     if (phase !== 'lobby' && phase !== 'end') { st.obj = title(); st.hints = hintsNow(); }
     if (phase === 'found' && foundBy) st.found = foundBy;
     if (phase === 'end') st.win = winnerText();
+    if (mode === 'aves' && cur && cur.sp) st.tg = cur.sp;
     mq.pub('casarefugio/' + code + '/tv', JSON.stringify(st));
   }
 
@@ -202,6 +207,7 @@ var GAME = (function(){
     if (p.press) {
       p.press = false;
       if (p.nearDog) caught(p);
+      else if (mode === 'aves' && phase === 'round') photo(p);
       else if (phase === 'round' && mode === 'sumiu' && p.nearSpot && p.searchT <= 0) { p.searchT = 0.9; p.searching = p.nearSpot; say(p, 'Procurando ' + p.nearSpot.name + '...', 1); }
     }
     if (p.searchT > 0) {
@@ -237,7 +243,7 @@ var GAME = (function(){
     nextRound();
   }
   function nextRound(){
-    restoreItem(); clearDog();
+    restoreItem(); clearDog(); clearBirds();
     if (round >= ROUNDS) { phase = 'end'; phaseT = 0; dirty = true; drawTvScreen(); return; }
     round++; roundT = 0; foundBy = null; timedOut = false;
     if (mode === 'sumiu') {
@@ -245,14 +251,24 @@ var GAME = (function(){
       if (!pool.length) { used = []; pool = CHALLENGES.slice(); }
       cur = pool[(Math.random() * pool.length) | 0]; used.push(CHALLENGES.indexOf(cur));
       house.items[cur.item].obj.visible = false;
+    } else if (mode === 'aves') {
+      var spool = SP_IDS.filter(function(x){ return used.indexOf(x) < 0; }); if (!spool.length) { used = []; spool = SP_IDS.slice(); }
+      cur = { sp: spool[(Math.random() * spool.length) | 0] }; used.push(cur.sp);
+      placeBirds();
     } else spawnDog();
     phase = 'round'; dirty = true;
     drawTvScreen();
   }
   function hintCount(){ return Math.min(3, 1 + Math.floor(roundT / HINT_EVERY)); }
-  function title(){ return mode === 'marshal' ? 'Cadê o Marshal?' : (cur ? 'Sumiu ' + house.items[cur.item].name + '!' : ''); }
+  function title(){ return mode === 'marshal' ? 'Cadê o Marshal?' : mode === 'aves' ? (cur ? 'Fotografe ' + SPECIES[cur.sp].name + '!' : '') : (cur ? 'Sumiu ' + house.items[cur.item].name + '!' : ''); }
   function hintsNow(){
     if (mode === 'sumiu') return cur ? cur.hints.slice(0, hintCount()) : [];
+    if (mode === 'aves') {
+      var tb = birds.filter(function(b){ return cur && b.sp === cur.sp; })[0], ha = [SPECIES[cur.sp].desc, '🎧 De fone, siga o canto. Mire a câmera no pássaro e aperte A. Dá pra fotografar através do vidro.'];
+      if (tb && hintCount() >= 2) ha.push('📍 Ele está ' + (inHouse(tb.x, tb.z) ? 'dentro de casa, ' + roomOf(tb.x, tb.z) : tb.y < 0.2 ? 'lá fora, no gramado' : tb.z < 0 ? 'lá fora, na varanda' : tb.x > 16 ? 'lá fora, no deque' : 'lá fora, perto da janela da cozinha') + '.');
+      if (tb && hintCount() >= 3) ha.push('👀 ' + (tb.y > 1.8 ? 'Olhe para o alto!' : tb.y < 0.3 ? 'Olhe para baixo!' : 'Ele está mais ou menos na altura dos olhos.'));
+      return ha;
+    }
     var h = ['🐾 Ele fica indo e vindo pela casa. Siga os cocôs e os latidos (com fone de ouvido, o som vem da direção certa)!'];
     if (npc && hintCount() >= 2) h.push('🐶 Agora ele está ' + roomOf(npc.x, npc.z) + '.');
     if (npc && hintCount() >= 3) h.push('👃 Bem pertinho ' + nearestSpotName(npc.x, npc.z) + '.');
@@ -260,6 +276,7 @@ var GAME = (function(){
   }
   function targetPos(){
     if (mode === 'marshal') return npc ? { x: npc.x, z: npc.z } : null;
+    if (mode === 'aves') { var tb = birds.filter(function(b){ return cur && b.sp === cur.sp; })[0]; return tb ? { x: tb.x, z: tb.z } : null; }
     return cur ? spotById(cur.spot) : null;
   }
   function found(p){
@@ -282,6 +299,8 @@ var GAME = (function(){
       var it = house.items[cur.item], sp = spotById(cur.spot);
       it.obj.visible = true; it.obj.position.set(sp.x, 1.3, sp.z);
       foundBy = 'Tempo esgotado! ' + it.name.charAt(0).toUpperCase() + it.name.slice(1) + ' estava ' + sp.name + '.';
+    } else if (mode === 'aves') {
+      foundBy = 'Tempo esgotado! Ninguém fotografou ' + SPECIES[cur.sp].name + '.';
     } else {
       foundBy = 'Tempo esgotado! O Marshal estava ' + roomOf(npc.x, npc.z) + '.'; npc.state = 'caught'; bark();
     }
@@ -360,7 +379,6 @@ var GAME = (function(){
   function goTo(h, speed){ var path = findPath(npc.x, npc.z, h[0], h[1]); if (path && path.length) { npc.path = path; npc.state = 'move'; npc.speed = speed; npc.dest = h; return true; } return false; }
   function bark(){
     barkN++; dirty = true;
-    if (explore && slots[0] && npc) { var p = slots[0]; AUDIO.play('bark', AUDIO.rel(p.x, p.z, p.ang, npc.x, npc.z, 0.4 - p.info.cam), occluded(p.x, p.z, npc.x, npc.z)); }
   }
   function occluded(x0, z0, x1, z1){
     var d = Math.sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0)), n = Math.ceil(d / 0.25);
@@ -411,6 +429,171 @@ var GAME = (function(){
     return ps[0].info.name + ' venceu!';
   }
 
+  /* ---------------- sound propagation (occlusion, glass, sound around doorways) ---------------- */
+  var SG = 0.1, SX = 160, SZ = 110, solidG = null, glassG = null, fields = {};
+  function buildSoundGrids(){
+    solidG = new Uint8Array(SX * SZ); glassG = new Uint8Array(SX * SZ);
+    var W = house.walls;
+    for (var j = 0; j < SZ; j++) for (var i = 0; i < SX; i++) {
+      var x = (i + 0.5) * SG, z = (j + 0.5) * SG;
+      for (var k = 0; k < W.length; k++) { var b = W[k]; if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1) { if (b.glass) glassG[j * SX + i] = 1; else if ((b.h === undefined ? 99 : b.h) >= 1.6) solidG[j * SX + i] = 1; } }
+    }
+  }
+  function nearestFree(c){
+    if (grid[c]) return c;
+    var cx = c % GX, cz = (c / GX) | 0;
+    for (var r = 1; r < 8; r++) for (var dz = -r; dz <= r; dz++) for (var dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+      var nx = cx + dx, nz = cz + dz; if (nx < 0 || nz < 0 || nx >= GX || nz >= GZ) continue;
+      if (grid[nz * GX + nx]) return nz * GX + nx;
+    }
+    return c;
+  }
+  function inHouse(x, z){ return x > 0 && x < 16 && z > 0 && z < 11; }
+  // what lies on the straight line between two points: 0 = open, 1 = only glass, 2 = solid wall
+  function lineClass(x0, z0, x1, z1){
+    if (!solidG) buildSoundGrids();
+    var d = Math.sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0)), n = Math.max(1, Math.ceil(d / 0.08)), glass = false;
+    for (var i = 1; i < n; i++) {
+      var t = i / n, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+      if (x <= 0 || x >= 16 || z <= 0 || z >= 11) continue;
+      var c = Math.floor(z / SG) * SX + Math.floor(x / SG);
+      if (solidG[c]) return 2; if (glassG[c]) glass = true;
+    }
+    if (inHouse(x0, z0) !== inHouse(x1, z1)) glass = true;   // every opening in the outer walls is glass
+    return glass ? 1 : 0;
+  }
+  // distance field (in grid cells) from a source, through open doorways
+  function fieldFrom(key, x, z){
+    if (!grid) buildGrid();
+    var c0 = nearestFree(cellOf(x, z)), f = fields[key];
+    if (f && f.c0 === c0) return f.d;
+    var d = new Float32Array(GX * GZ).fill(1e9), q = [c0], qi = 0; d[c0] = 0;
+    while (qi < q.length) {
+      var c = q[qi++], cx = c % GX, cz = (c / GX) | 0;
+      for (var dz = -1; dz <= 1; dz++) for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dz) continue; var nx = cx + dx, nz = cz + dz; if (nx < 0 || nz < 0 || nx >= GX || nz >= GZ) continue;
+        var nn = nz * GX + nx; if (!grid[nn]) continue;
+        var nd = d[c] + (dx && dz ? 1.41 : 1); if (nd < d[nn] - 0.01) { d[nn] = nd; q.push(nn); }
+      }
+    }
+    fields[key] = { c0: c0, d: d }; return d;
+  }
+  // where a listener should hear a source: straight line if open, through glass if glass, else from the doorway
+  function apparent(key, lx, lz, sx, sz){
+    var cls = lineClass(lx, lz, sx, sz);
+    if (cls === 0) return { x: sx, z: sz, o: 0 };
+    if (cls === 1) return { x: sx, z: sz, o: 0.4 };
+    if (!inHouse(lx, lz) || !inHouse(sx, sz)) return { x: sx, z: sz, o: 0.8 };
+    var d = fieldFrom(key, sx, sz), c = nearestFree(cellOf(lx, lz)), cStart = c;
+    if (d[c] > 1e8) return { x: sx, z: sz, o: 0.85 };
+    var pts = [], guard = 0;
+    while (d[c] > 0 && guard++ < 300) {
+      var cx = c % GX, cz = (c / GX) | 0, best = c;
+      for (var dz = -1; dz <= 1; dz++) for (var dx = -1; dx <= 1; dx++) { var nx = cx + dx, nz = cz + dz; if (nx < 0 || nz < 0 || nx >= GX || nz >= GZ) continue; var nn = nz * GX + nx; if (d[nn] < d[best]) best = nn; }
+      if (best === c) break; c = best; pts.push([(c % GX + 0.5) * GS, (((c / GX) | 0) + 0.5) * GS]);
+    }
+    var vis = null;
+    for (var i = 0; i < pts.length; i += 2) { if (lineClass(lx, lz, pts[i][0], pts[i][1]) === 2) break; vis = pts[i]; }
+    if (!vis) return { x: sx, z: sz, o: 0.85 };
+    var plen = d[cStart] * GS + 0.3, vx = vis[0] - lx, vz = vis[1] - lz, vl = Math.sqrt(vx * vx + vz * vz) || 1;
+    return { x: lx + vx / vl * plen, z: lz + vz / vl * plen, o: 0.45 };
+  }
+  function earY(p){ return p.y + p.info.cam * 0.92; }
+  function audioSourcesFor(p){
+    var out = [];
+    if (mode === 'marshal' && npc) {
+      var ap = apparent('dog', p.x, p.z, npc.x, npc.z);
+      out.push({ id: 'm', t: 'bark', x: ap.x, y: 0.35, z: ap.z, o: ap.o, n: barkN, mv: npc.state === 'move' ? 1 : 0 });
+    }
+    if (mode === 'aves') birds.forEach(function(b, i){
+      var ab = apparent('b' + b.sp, p.x, p.z, b.x, b.z);
+      out.push({ id: 'b' + i, t: b.sp, x: ab.x, y: b.y + 0.1, z: ab.z, o: ab.o, n: b.n, mv: 0 });
+    });
+    return out;
+  }
+
+  /* ---------------- game 3: Passarinhos (bird photo hunt) ---------------- */
+  var SPECIES = {
+    bemtevi:   { name: 'o bem-te-vi', belly: 0xf2c919, back: 0x6b5a3a, head: 0x1a1a1a, stripe: 0xffffff, desc: '🐦 Barriga amarela, uma faixa branca na cabeça, e grita o próprio nome: "bem-te-vi!"' },
+    sabia:     { name: 'o sabiá-laranjeira', belly: 0xd8742a, back: 0x7a6a55, head: 0x7a6a55, desc: '🐦 A ave-símbolo do Brasil: barriga cor de laranja e um canto melodioso, como uma flauta.' },
+    joao:      { name: 'o joão-de-barro', belly: 0xd9a066, back: 0xa8622e, head: 0xa8622e, desc: '🐦 Constrói a casinha de barro em forma de forno. O casal canta junto, numa risada acelerada.' },
+    quero:     { name: 'o quero-quero', belly: 0xf2f2f2, back: 0x8d8d84, head: 0x6f6f6f, chest: 0x111111, ground: true, desc: '🐦 Vive no chão dos gramados, tem esporão nas asas e grita "quero-quero!" quando alguém chega perto.' },
+    periquito: { name: 'o periquito-rico', belly: 0x7ccf4a, back: 0x4caf2e, head: 0x5fbf3a, desc: '🐦 Todo verdinho, anda em bando e faz uma algazarra de chiados agudos.' },
+    andorinha: { name: 'a andorinha', belly: 0xf5f5f5, back: 0x1f2f5a, head: 0x1f2f5a, high: true, desc: '🐦 Costas azul-escuras, barriga branca, voa rápido e faz um gorjeio baixinho.' }
+  };
+  var SP_IDS = Object.keys(SPECIES);
+  var PERCH_GROUND = [[-3.5, 0, 1.0], [-5, 0, -2], [-2.5, 0, -6.5], [18.5, 0.12, 2.5], [10, 0, -6], [3, 0, -7], [24, 0, 5]];
+  var PERCH = [
+    [1.5, 0.9, -3.47, 'out'], [6.8, 0.9, -3.47, 'out'], [13.5, 0.9, -3.47, 'out'], [4.2, 2.97, -3.38, 'out', 1], [12.2, 2.97, -3.38, 'out', 1],
+    [20.8, 0.82, 2.5, 'out'], [7.8, 2.4, 13.3, 'out', 1], [-0.4, 2.75, 1.2, 'out', 1], [16.4, 2.6, 3.0, 'out', 1],
+    [15.75, 2.52, 5.7, 'in', 1], [11.0, 1.88, 0.5, 'in'], [6.6, 2.12, 6.55, 'in', 1], [8.9, 1.13, 6.45, 'in'], [5.0, 1.92, 10.55, 'in'],
+    [3.5, 2.17, 10.92, 'in', 1], [11.5, 0.9, 4.5, 'in'], [10.5, 0.55, 2.3, 'in'], [7.7, 3.1, 3.0, 'in', 1], [2.7, 0.55, 2.7, 'in'], [13.6, 0.82, 8.6, 'in']
+  ];
+  var birds = [], birdMat = {}, flash = 0;
+  function birdModel(sp){
+    var S = SPECIES[sp], g = new THREE.Group();
+    function M(c){ return birdMat[c] || (birdMat[c] = new THREE.MeshLambertMaterial({ color: c })); }
+    var body = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), M(S.back)); body.scale.set(0.85, 0.8, 1.35); body.position.y = 0.09; g.add(body);
+    var belly = new THREE.Mesh(new THREE.SphereGeometry(0.068, 10, 8), M(S.belly)); belly.scale.set(0.8, 0.75, 1.2); belly.position.set(0, 0.078, 0.012); g.add(belly);
+    if (S.chest) { var ch = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), M(S.chest)); ch.position.set(0, 0.1, 0.07); g.add(ch); }
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), M(S.head)); head.position.set(0, 0.16, 0.08); g.add(head);
+    if (S.stripe) { var st = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.008, 4, 14), M(S.stripe)); st.position.set(0, 0.165, 0.08); st.rotation.x = Math.PI / 2; g.add(st); }
+    var beak = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.05, 6), M(0x2a2a2a)); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.155, 0.14); g.add(beak);
+    [-1, 1].forEach(function(sd){ var e = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 4), M(0x000000)); e.position.set(sd * 0.032, 0.172, 0.11); g.add(e); });
+    var tail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.11), M(S.back)); tail.position.set(0, 0.08, -0.13); tail.rotation.x = -0.35; g.add(tail);
+    [-1, 1].forEach(function(sd){ var w = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), M(S.back)); w.scale.set(0.25, 0.6, 1.3); w.position.set(sd * 0.06, 0.1, -0.01); g.add(w); });
+    if (S.ground) { [-1, 1].forEach(function(sd){ var l = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.1, 4), M(0xd9a05a)); l.position.set(sd * 0.025, -0.0, 0); g.add(l); }); g.position.y = 0.05; }
+    var root = new THREE.Group(); root.add(g); root.scale.setScalar(1.25); return { root: root, inner: g, head: head };
+  }
+  function placeBirds(){
+    clearBirds();
+    var free = PERCH.slice(), freeG = PERCH_GROUND.slice();
+    SP_IDS.forEach(function(sp){
+      var S = SPECIES[sp], list = S.ground ? freeG : free.filter(function(p){ return !S.high || p[4]; });
+      if (!list.length) list = free;
+      var pick = list[(Math.random() * list.length) | 0];
+      if (S.ground) freeG.splice(freeG.indexOf(pick), 1); else free.splice(free.indexOf(pick), 1);
+      var m = birdModel(sp); m.root.position.set(pick[0], pick[1], pick[2]); m.root.rotation.y = Math.random() * 6.28; scene.add(m.root);
+      birds.push({ sp: sp, x: pick[0], y: pick[1], z: pick[2], model: m, n: 0, singT: 1 + Math.random() * 5, sing: 0 });
+    });
+  }
+  function clearBirds(){ birds.forEach(function(b){ scene.remove(b.model.root); }); birds = []; }
+  function updateBirds(dt){
+    var t = performance.now() / 1000;
+    birds.forEach(function(b, i){
+      if (phase === 'round') { b.singT -= dt; if (b.singT <= 0) { b.n++; b.sing = 0.5; dirty = true; b.singT = (cur && cur.sp === b.sp) ? 3.5 + Math.random() * 2.5 : 5 + Math.random() * 5; } }
+      b.sing = Math.max(0, b.sing - dt);
+      b.model.inner.position.y = (SPECIES[b.sp].ground ? 0.05 : 0) + Math.abs(Math.sin(t * 3 + i)) * 0.012 + (b.sing > 0 ? Math.abs(Math.sin(t * 30)) * 0.02 : 0);
+      b.model.head.rotation.y = Math.sin(t * 0.9 + i * 2) * 0.6;
+    });
+  }
+  // the bird in front of the camera (for the photo)
+  function birdInView(p){
+    var best = null, bestA = 0.45;
+    birds.forEach(function(b){
+      var dx = b.x - p.x, dz = b.z - p.z, d = Math.sqrt(dx * dx + dz * dz); if (d > 13 || d < 0.2) return;
+      var a = Math.abs(Math.atan2(dz, dx) - p.ang); while (a > Math.PI) a = Math.abs(a - 2 * Math.PI);
+      if (a > bestA) return;
+      if (lineClass(p.x, p.z, b.x, b.z) === 2) return;
+      best = b; bestA = a;
+    });
+    return best;
+  }
+  function photo(p){
+    var b = birdInView(p); if (!b) return;
+    if (p === slots[0] && explore) flash = 1; p.flashT = 0.5;
+    buzz(p, [10, 30, 10]);
+    if (b.sp === cur.sp) {
+      p.score++; phase = 'found'; phaseT = 0;
+      foundBy = '📸 ' + p.info.name + ' fotografou ' + SPECIES[b.sp].name + '!';
+      slots.forEach(function(q){ if (q) { say(q, q === p ? '📸 Foto perfeita! +1 ponto' : foundBy, 6); buzz(q, q === p ? [80, 60, 160] : [40]); } });
+      dirty = true; drawTvScreen();
+    } else {
+      say(p, '📸 Isso é ' + SPECIES[b.sp].name + '! Procure ' + SPECIES[cur.sp].name + '.', 2.5);
+    }
+  }
+
   /* ---------------- HUD ---------------- */
   function buildHud(){
     var h = $('hud');
@@ -420,6 +603,7 @@ var GAME = (function(){
       '<div class="desc">Até 3 jogadores, cada um com sua tela, usando o celular como controle.</div>' +
       '<div class="desc"><b>🔎 Sumiu!</b> Um objeto da casa desaparece. Siga as dicas de música, enfermagem, aves e conhecimentos gerais e procure antes do tempo acabar.</div>' +
       '<div class="desc"><b>🐶 Cadê o Marshal?</b> O Marshal se esconde e fica indo e vindo pela casa. Siga os cocôs e os latidos (com fone de ouvido!) e pegue ele.</div>' +
+      '<div class="desc"><b>🐦 Passarinhos</b> Seis aves brasileiras cantam pela casa e pelo quintal. Descubra pelo canto onde está a ave pedida e tire a foto dela.</div>' +
       '<div class="desc">Quando todos entrarem, escolham o jogo no celular.</div>' +
       '<div class="lmsg" id="lmsg"></div></div>' +
       '<div class="right"><div class="qr" id="hqr"></div><div class="scan">📷 Aponte a câmera do celular</div>' +
@@ -479,7 +663,7 @@ var GAME = (function(){
       v.style.display = 'block'; place(v, L.views[i]);
       v.children[0].textContent = p.info.name + ' · ' + p.score; v.children[0].style.background = p.info.color;
       v.children[1].textContent = p.msgT > 0 ? p.msg : ''; v.children[1].style.display = p.msgT > 0 ? 'block' : 'none';
-      var pr2 = p.nearDog ? 'Aperte A: pegar o Marshal!' : (phase === 'round' && mode === 'sumiu' && p.nearSpot && p.searchT <= 0) ? 'Aperte A: procurar ' + p.nearSpot.name : '';
+      var pr2 = p.nearDog ? 'Aperte A: pegar o Marshal!' : (mode === 'aves' && phase === 'round' && birdInView(p)) ? '📷 Aperte A: fotografar' : (phase === 'round' && mode === 'sumiu' && p.nearSpot && p.searchT <= 0) ? 'Aperte A: procurar ' + p.nearSpot.name : '';
       v.children[2].textContent = pr2; v.children[2].style.display = pr2 ? 'block' : 'none';
       var sn = v.children[3];
       if (p.ch === 'marshal' && phase === 'round' && mode === 'sumiu') {
@@ -520,7 +704,9 @@ var GAME = (function(){
       if (roundT >= ROUND_TIME) timeUp();
     }
     if (phase === 'found') { phaseT += dt; if (mode === 'sumiu') { var it = house.items[cur.item].obj; it.rotation.y += dt * 2; } if (phaseT > 6) nextRound(); }
-    updateDog(dt);
+    updateDog(dt); updateBirds(dt);
+    if (explore && slots[0]) { var me = slots[0]; AUDIO.setListener(me.x, earY(me), me.z, me.ang); AUDIO.setSources(audioSourcesFor(me)); }
+    if (flash > 0) { flash = Math.max(0, flash - dt * 2.5); $('flash').style.opacity = flash; }
     var active = slots.filter(Boolean);
     active.forEach(function(p){ updatePlayer(p, dt); });
     publish(now);
@@ -551,5 +737,5 @@ var GAME = (function(){
     renderer.render(scene, cam);
   }
 
-  return { start: start, _msg: onMsg, _slots: function(){ return slots; }, _phase: function(){ return phase; }, _cur: function(){ return cur; }, _house: function(){ return house; }, _info: function(){ return renderer.info; }, _npc: function(){ return npc; }, _fakeCode: function(c){ code = c; hud.code.textContent = c; drawQR(); }, _poos: function(){ return poos; } };
+  return { start: start, _msg: onMsg, _slots: function(){ return slots; }, _phase: function(){ return phase; }, _cur: function(){ return cur; }, _house: function(){ return house; }, _info: function(){ return renderer.info; }, _npc: function(){ return npc; }, _fakeCode: function(c){ code = c; hud.code.textContent = c; drawQR(); }, _fakeMq: function(){ mq = { pub: function(t, s){ window.LASTPUB = s; }, sub: function(){} }; code = '1234'; }, _poos: function(){ return poos; }, _birds: function(){ return birds; }, _apparent: apparent, _audio: audioSourcesFor };
 })();

@@ -126,7 +126,7 @@ function build(scene){
   // ---- X = 0 end wall (front door, hot tub window, bathroom) ----
   B(-0.2, 0, 0, 0.9, 0, 2.4, M.tubtile, 'w');          // below hot-tub window
   B(-0.2, 0, 2.7, EAVE, 0, 2.4, M.wall);                // above window
-  D('x+', 0.0, 2.4, 0.9, 2.7, 0.0, M.glass); walls.push({ x0: -0.2, x1: 0, z0: 0, z1: 2.4 });
+  D('x+', 0.0, 2.4, 0.9, 2.7, 0.0, M.glass); walls.push({ x0: -0.2, x1: 0, z0: 0, z1: 2.4, glass: true });
   B(-0.2, 0, 0, H1, 2.4, 4.0, M.wall, 'w');
   D('x+', 2.4, 4.0, 0, 2.65, 0.005, M.tubtile);
   B(-0.25, 0, 2.45, H1, 4.0, 5.3, M.wall);             // over door
@@ -143,7 +143,7 @@ function build(scene){
   // glass Z 0..5
   for (var gz = 0; gz < 5; gz += 1.25) B(15.95, 16.05, 0, EAVE, gz, gz + 0.06, M.frame);
   B(15.95, 16.05, 0, 0.06, 0, 5, M.frame); B(15.95, 16.05, 2.55, 2.62, 0, 5, M.frame);
-  D('x-', 0, 5, 0, 2.55, 16.0, M.glass); walls.push({ x0: 16, x1: 16.2, z0: 0, z1: 5 });
+  D('x-', 0, 5, 0, 2.55, 16.0, M.glass); walls.push({ x0: 16, x1: 16.2, z0: 0, z1: 5, glass: true });
   B(15.95, 16.05, 2.62, EAVE, 0, 5, M.wall);
   B(16, 16.2, 0, H1, 5, 11, M.wall, 'w');
   // dining windows X=16 (Z 6.8..10.6)
@@ -157,7 +157,7 @@ function build(scene){
     for (var i = 0; i <= panes; i++) B(x0 + i * w - 0.04, x0 + i * w + 0.04, 0, 2.55, -0.05, 0.05, M.frame);
     B(x0, x1, 0, 0.06, -0.05, 0.05, M.frame); B(x0, x1, 2.5, 2.6, -0.05, 0.05, M.frame);
     D('z+', x0, x1, 0.06, 2.5, 0.0, M.glass);
-    walls.push({ x0: x0, x1: x1, z0: -0.2, z1: 0 });
+    walls.push({ x0: x0, x1: x1, z0: -0.2, z1: 0, glass: true });
     B(x0, x1, 2.6, EAVE, -0.05, 0.08, M.wall);
   }
   glassRun(0, 3.2, 2);                                    // hot tub
@@ -229,7 +229,7 @@ function build(scene){
   B(0.35, 0.42, 0.05, TP - 0.05, 0.35, 2.35, M.white); B(2.53, 2.6, 0.05, TP - 0.05, 0.35, 2.35, M.white);
   B(0.42, 2.53, 0.05, 0.08, 0.42, 2.28, M.white);
   B(0.42, 2.53, 0.43, 0.44, 0.42, 2.28, M.water);
-  walls.push({ x0: 0.35, x1: 2.6, z0: 0.35, z1: 2.35 });
+  walls.push({ x0: 0.35, x1: 2.6, z0: 0.35, z1: 2.35, h: 0.55 });
   B(3.05, 3.4, 0, 0.27, 0.9, 2.2, M.deck);   // step
   // pillows (headrests)
   G(sph(0.09, 8, 6), M.black, 0.6, TP, 1.2, 0, 0, 0, 1); G(sph(0.09, 8, 6), M.black, 1.4, TP, 0.45, 0, 0, 0, 1);
@@ -246,7 +246,7 @@ function build(scene){
   // shower (glass box) at the back
   B(0.0, 1.4, 0, 0.04, 9.6, 11, M.white);
   B(0.0, 1.4, 0, 2.0, 9.58, 9.6, M.glass); B(1.38, 1.4, 0, 2.0, 9.6, 11, M.glass);
-  walls.push({ x0: 1.38, x1: 1.42, z0: 9.6, z1: 11 });
+  walls.push({ x0: 1.38, x1: 1.42, z0: 9.6, z1: 11, glass: true });
   G(cyl(0.12, 0.12, 0.02, 14), M.steel, 0.7, 2.05, 10.6); G(cyl(0.012, 0.012, 0.3, 6), M.steel, 0.7, 2.2, 10.85, Math.PI / 2, 0, 0);
   // toilet
   B(2.25, 2.85, 0, 0.42, 10.2, 10.6, M.white, 's'); G(cyl(0.2, 0.17, 0.4, 14), M.white, 2.45, 0.2, 10.15); B(2.7, 2.92, 0.42, 0.85, 9.95, 10.4, M.white);
@@ -306,10 +306,11 @@ function build(scene){
   // bar: red mosaic half wall + wood top (living side), island with cooktop (kitchen side)
   B(5.0, 10.0, 0, 1.08, 6.55, 6.8, M.mosaic, 'w');
   B(4.95, 10.05, 1.08, 1.13, 6.32, 6.85, M.woodTop);
-  B(5.0, 10.0, 0, 0.86, 6.8, 7.55, M.cabinet, 'w'); B(4.98, 10.02, 0.86, 0.9, 6.78, 7.58, M.granite);
+  B(5.0, 9.3, 0, 0.86, 6.8, 7.55, M.cabinet, 'w'); B(4.98, 9.32, 0.86, 0.9, 6.78, 7.58, M.granite);
   B(5.0, 10.0, 0.9, 1.08, 6.76, 6.8, M.granite);
-  for (var dx = 5.4; dx < 10; dx += 0.6) B(dx, dx + 0.02, 0.05, 0.84, 7.55, 7.56, M.cabinetLine);
-  B(5.0, 10.0, 0.42, 0.43, 7.55, 7.56, M.cabinetLine);
+  for (var dx = 5.4; dx < 9.3; dx += 0.6) B(dx, dx + 0.02, 0.05, 0.84, 7.55, 7.56, M.cabinetLine);
+  B(5.0, 9.3, 0.42, 0.43, 7.55, 7.56, M.cabinetLine);
+  B(9.3, 9.31, 0.05, 0.86, 6.8, 7.55, M.cabinetLine);
   B(7.15, 7.95, 0.9, 0.915, 6.92, 7.45, M.black);                      // cooktop
   [[7.3, 7.05], [7.8, 7.05], [7.3, 7.32], [7.8, 7.32], [7.55, 7.18]].forEach(function(p){ G(cyl(0.06, 0.07, 0.03, 10), M.steelDark, p[0], 0.93, p[1]); });
   B(7.15, 7.95, 0.12, 0.8, 7.555, 7.57, M.black);                       // oven door
@@ -463,7 +464,7 @@ function build(scene){
   // water tank on stilts
   G(cyl(0.9, 0.9, 1.2, 16), M.tankBlue, 19, 4.6, -8); for (var tk = 0; tk < 4; tk++) G(cyl(0.05, 0.05, 4, 6), M.steelDark, 19 + (tk % 2 ? 0.6 : -0.6), 2, -8 + (tk > 1 ? 0.6 : -0.6));
   // trees
-  var trees = [[-6, -8], [-9, 2], [-7, 9], [-12, -3], [4, -12], [10, -14], [16, -11], [24, -10], [31, -5], [32, 5], [27, 9], [20, 14], [12, 16], [5, 15], [-2, 16], [-14, 12], [-15, -12], [36, -14], [8, -22], [-4, -20]];
+  var trees = [[7.6, 14.2], [-6, -8], [-9, 2], [-7, 9], [-12, -3], [4, -12], [10, -14], [16, -11], [24, -10], [31, -5], [32, 5], [27, 9], [20, 14], [12, 16], [5, 15], [-2, 16], [-14, 12], [-15, -12], [36, -14], [8, -22], [-4, -20]];
   trees.forEach(function(t, i){
     var h = 2.5 + (i % 4) * 0.7;
     G(cyl(0.15, 0.22, h, 6), M.trunk, t[0], h / 2, t[1]);

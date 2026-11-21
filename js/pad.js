@@ -1,7 +1,7 @@
 /* Phone controller */
 var PAD = (function(){
   function $(id){ return document.getElementById(id); }
-  var myId, code, mq = null, jmp = false, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
+  var myId, code, mq = null, pose = null, tg = null, jmp = false, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
   try { myId = localStorage.getItem('crId'); } catch (e) {}
   if (!myId) { myId = 'p' + Math.random().toString(36).slice(2, 9); try { localStorage.setItem('crId', myId); } catch (e) {} }
 
@@ -74,6 +74,17 @@ var PAD = (function(){
     A.addEventListener('touchend', up); A.addEventListener('touchcancel', up);
     $('startBtn').onclick = function(){ gmSel = 'sumiu'; startN = 4; buzz(12); AUDIO.init(); };
     $('startBtn2').onclick = function(){ gmSel = 'marshal'; startN = 4; buzz(12); AUDIO.init(); };
+    $('startBtn3').onclick = function(){ gmSel = 'aves'; startN = 4; buzz(12); AUDIO.init(); };
+    $('hearBtn').onclick = function(){ AUDIO.init(); if (tg) AUDIO.preview(tg); };
+    // listener prediction: apply this phone's own joystick right away, the TV's updates correct it
+    setInterval(function(){
+      if (!pose || !ch) return;
+      var info = CHARS.info[ch], lag = Math.min(0.5, (performance.now() - pose.t) / 1000 + (rtt ? rtt / 2000 : 0.1));
+      var tx = Math.abs(x) < 0.12 ? 0 : x, ty = Math.abs(y) < 0.12 ? 0 : y;
+      var a = pose.a + (tx < 0 ? -1 : 1) * Math.pow(Math.abs(tx), 1.8) * 2.0 * lag;
+      var sp = -ty * info.speed; if (sp < 0) sp *= 0.5;
+      AUDIO.setListener(pose.x + Math.cos(a) * sp * lag, pose.y, pose.z + Math.sin(a) * sp * lag, a);
+    }, 30);
     $('swapBtn').onclick = function(){ leaveN = 3; setTimeout(function(){ ch = null; show('choose'); }, 200); };
   }
 
@@ -102,21 +113,23 @@ var PAD = (function(){
     if (me && me.sc > lastSc && lastSc >= 0) { try { navigator.vibrate([80, 60, 160]); } catch (e) {} }
     if (me) lastSc = me.sc;
     if (me && me.ch !== ch && CHARS.info[me.ch]) { ch = me.ch; try { localStorage.setItem('crCh', ch); } catch (e) {} }
-    if (state.gm === 'marshal' && typeof state.bk === 'number') {
-      if (lastBk >= 0 && state.bk > lastBk && me && typeof state.mx === 'number') AUDIO.play('bark', AUDIO.rel(me.px, me.pz, me.pa, state.mx, state.mz, -0.8), !!me.oc);
-      lastBk = state.bk;
-    } else lastBk = -1;
+    // spatial audio: the TV sends where each sound should come from for *this* player
+    if (me && typeof me.px === 'number') {
+      pose = { x: me.px, z: me.pz, a: me.pa, y: me.py || 1.6, t: performance.now() };
+      AUDIO.setSources((me.au || []).map(function(e){ return { id: e[0], t: e[1], x: e[2], y: e[3], z: e[4], o: e[5], n: e[6], mv: e[7] }; }));
+    }
+    $('hearBtn').style.display = state.gm === 'aves' && state.ph === 'round' ? 'inline-block' : 'none'; tg = state.tg;
     if (me) { if (lastBp >= 0 && me.bp > lastBp) buzz(25); lastBp = me.bp; lastHt = me.ht || 0;
       if (me.msg && me.msg.indexOf('Nada') === 0 && render._lastMsg !== me.msg) buzz([30, 50, 30]); render._lastMsg = me.msg; }
     var nh = (state.hints || []).length; if (state.ph === 'round' && nh > lastHints) buzz([40, 40, 40]); lastHints = state.ph === 'round' ? nh : 0;
     if (ch && !me && taken[ch]) { ch = null; show('choose'); status('Esse personagem já foi escolhido.'); return; }
     var lobby = state.ph === 'lobby', end = state.ph === 'end';
     $('lobbyBtns').style.display = (lobby || end) ? 'flex' : 'none';
-    $('startBtn').textContent = '🔎 Sumiu!'; $('startBtn2').textContent = '🐶 Cadê o Marshal?';
+    $('startBtn').textContent = '🔎 Sumiu!'; $('startBtn2').textContent = '🐶 Cadê o Marshal?'; $('startBtn3').textContent = '🐦 Passarinhos';
     $('swapBtn').style.display = lobby ? 'block' : 'none';
-    $('startBtn2').style.display = 'block';
+    $('startBtn2').style.display = 'block'; $('startBtn3').style.display = 'block';
     var h = '';
-    if (lobby) h = '<div class="ph">Esperando todo mundo entrar...</div><div class="sub">Ande pela casa! Quando todos estiverem prontos, escolha o jogo aqui embaixo. No "Cadê o Marshal?", use fone de ouvido para ouvir de onde vêm os latidos.</div>';
+    if (lobby) h = '<div class="ph">Esperando todo mundo entrar...</div><div class="sub">Ande pela casa! Quando todos estiverem prontos, escolha o jogo aqui embaixo. No "Cadê o Marshal?" e no "Passarinhos", use fone de ouvido: o som vem da direção certa.</div>';
     else if (end) h = '<div class="ph">Fim de jogo!</div><div class="sub">' + (state.win || '') + '</div><div class="sub">Escolha um jogo para jogar de novo.</div>';
     else {
       h = '<div class="sub">Rodada ' + state.r + ' de ' + state.R + (state.ph === 'round' ? ' · ⏱ ' + state.tl + ' s' : '') + '</div><div class="ph">' + (state.obj || '') + '</div>';
@@ -124,7 +137,7 @@ var PAD = (function(){
       if (state.found) h += '<div class="found">' + state.found + '</div>';
     }
     if ($('info')._h !== h) { $('info').innerHTML = h; $('info')._h = h; }
-    $('aLabel').textContent = me && me.nd ? 'pegar o Marshal!' : (me && me.near && state.ph === 'round' ? 'procurar ' + me.near : '');
+    $('aLabel').textContent = me && me.nd ? 'pegar o Marshal!' : state.gm === 'aves' && state.ph === 'round' ? 'fotografar' : (me && me.near && state.ph === 'round' ? 'procurar ' + me.near : '');
     $('meMsg').textContent = me && me.msg ? me.msg : '';
     status(rtt ? 'atraso ' + rtt + ' ms' : '');
   }
