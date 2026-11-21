@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Casa Refúgio - Airbnb</title>
+<style>
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none}
+  html,body{margin:0;height:100%;background:#14161c;color:#eee;font-family:sans-serif;overflow:hidden}
+  #menu{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+  #menu h1{margin:0 0 30px;font-size:44px}
+  .big{font-size:30px;padding:22px 40px;border-radius:16px;border:0;background:#2d6cdf;color:#fff;margin:10px;min-width:380px}
+  .big:focus{outline:5px solid #ffd54a}
+  #status{position:fixed;top:6px;left:10px;font-size:16px;white-space:pre;z-index:5;text-shadow:0 0 4px #000}
+  #tv{position:fixed;inset:0;top:0;left:0;right:0;bottom:0}
+  #tv canvas{width:100%;height:100%;display:block}
+  #code{position:fixed;right:20px;top:10px;font-size:42px;font-weight:bold;background:rgba(0,0,0,.6);padding:6px 18px;border-radius:12px;z-index:5}
+  #pad{height:100%;display:flex;flex-direction:column;touch-action:none}
+  #join{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px}
+  #join input{font-size:48px;width:220px;text-align:center;border-radius:12px;border:0;padding:8px}
+  #ctl{height:100%;display:flex;flex-direction:column}
+  #players{display:flex;justify-content:center;margin-top:34px}
+  #players button{font-size:18px;padding:10px 16px;margin:0 4px;border:0;border-radius:10px;opacity:.45;color:#fff}
+  #players button.on{opacity:1;outline:3px solid #fff}
+  #tiltBtn{font-size:16px;padding:8px 14px;border-radius:10px;border:0;margin:10px auto 0;display:block;background:#444;color:#fff}
+  #tiltBtn.on{background:#2fbf71}
+  #stickArea{flex:1;display:flex;align-items:center;justify-content:space-around;touch-action:none}
+  #stick{width:220px;height:220px;border-radius:50%;background:#222833;position:relative;border:3px solid #3a4252;touch-action:none}
+  #knob{width:90px;height:90px;border-radius:50%;background:#5b8cff;position:absolute;left:62px;top:62px}
+  #btnA{width:120px;height:120px;border-radius:50%;font-size:34px;background:#e0533d;border:0;color:#fff;touch-action:none}
+  #btnA.down{filter:brightness(1.5)}
+</style>
+</head>
+<body>
+<div id="status">carregando…</div>
+
+<div id="menu">
+  <h1>Casa Refúgio</h1>
+  <button class="big" id="goTV" autofocus>📺 Esta é a TV</button>
+  <button class="big" id="goPad">📱 Sou um controle</button>
+</div>
+
+<div id="tv" style="display:none"><div id="code">----</div></div>
+
+<div id="pad" style="display:none">
+  <div id="join">
+    <div style="font-size:22px">Código que aparece na TV:</div>
+    <input id="codeIn" type="tel" maxlength="4" inputmode="numeric">
+    <button class="big" id="joinBtn" style="min-width:220px">Entrar</button>
+  </div>
+  <div id="ctl" style="display:none">
+    <div id="players">
+      <button data-p="0" style="background:#e0533d">P1</button>
+      <button data-p="1" style="background:#2fbf71">P2</button>
+      <button data-p="2" style="background:#e6b422;color:#222">P3</button>
+    </div>
+    <button id="tiltBtn">Inclinar: desligado</button>
+    <div id="stickArea">
+      <div id="stick"><div id="knob"></div></div>
+      <button id="btnA">A</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ---------- tiny MQTT 3.1.1 over WebSocket (QoS 0 only) ---------- */
+var BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt'
+];
+var enc = new TextEncoder(), dec = new TextDecoder();
+function mqStr(s){ var b = enc.encode(s); var o = new Uint8Array(2 + b.length); o[0] = b.length >> 8; o[1] = b.length & 255; o.set(b, 2); return o; }
+function mqPacket(type, parts){
+  var len = 0, i; for (i = 0; i < parts.length; i++) len += parts[i].length;
+  var lenBytes = [], x = len;
+  do { var d = x % 128; x = Math.floor(x / 128); if (x > 0) d |= 128; lenBytes.push(d); } while (x > 0);
+  var out = new Uint8Array(1 + lenBytes.length + len), p = 0;
+  out[p++] = type; for (i = 0; i < lenBytes.length; i++) out[p++] = lenBytes[i];
+  for (i = 0; i < parts.length; i++) { out.set(parts[i], p); p += parts[i].length; }
+  return out;
+}
+function MQ(url, onMsg, onOpen, onFail){
+  var self = this, ws, opened = false, ping;
+  try { ws = new WebSocket(url, ['mqtt']); } catch (e) { onFail(); return; }
+  ws.binaryType = 'arraybuffer';
+  var to = setTimeout(function(){ if (!opened) { try{ws.close();}catch(e){} onFail(); } }, 6000);
+  ws.onopen = function(){
+    var id = 'cr' + Math.random().toString(36).slice(2, 10);
+    ws.send(mqPacket(0x10, [mqStr('MQTT'), new Uint8Array([4, 2, 0, 60]), mqStr(id)]));
+  };
+  ws.onmessage = function(ev){
+    var b = new Uint8Array(ev.data), p = 0;
+    while (p < b.length) {
+      var type = b[p] >> 4, mult = 1, len = 0, q = p + 1, d;
+      do { d = b[q++]; len += (d & 127) * mult; mult *= 128; } while (d & 128);
+      var body = b.subarray(q, q + len);
+      if (type === 2) { opened = true; clearTimeout(to); ping = setInterval(function(){ try{ws.send(new Uint8Array([0xC0,0]));}catch(e){} }, 30000); onOpen(); }
+      else if (type === 3) {
+        var tl = (body[0] << 8) | body[1];
+        var topic = dec.decode(body.subarray(2, 2 + tl));
+        var qos = (b[p] >> 1) & 3, start = 2 + tl + (qos ? 2 : 0);
+        onMsg(topic, dec.decode(body.subarray(start)));
+      }
+      p = q + len;
+    }
+  };
+  ws.onclose = ws.onerror = function(){ clearInterval(ping); if (!opened) { clearTimeout(to); onFail(); } else { setStatus('conexão perdida — recarregue a página'); } };
+  self.sub = function(t){ ws.send(mqPacket(0x82, [new Uint8Array([0, 1]), mqStr(t), new Uint8Array([0])])); };
+  self.pub = function(t, s){ if (ws.readyState === 1) ws.send(mqPacket(0x30, [mqStr(t), enc.encode(s)])); };
+}
+function connectBroker(idx, onMsg, cb){
+  // idx given: only that broker. idx null: try in order.
+  var list = idx == null ? [0, 1, 2] : [idx], k = 0;
+  function next(){
+    if (k >= list.length) { cb(null, -1); return; }
+    var i = list[k++]; setStatus('conectando ao servidor ' + (i + 1) + '…');
+    var m = new MQ(BROKERS[i], onMsg, function(){ cb(m, i); }, next);
+  }
+  next();
+}
+
+var $ = function(id){ return document.getElementById(id); };
+function setStatus(s){ $('status').textContent = s; }
+var COLORS = [0xe0533d, 0x2fbf71, 0xe6b422];
+
+$('goTV').onclick = function(){ location.hash = 'tv'; start('tv'); };
+$('goPad').onclick = function(){ location.hash = 'pad'; start('pad'); };
+if (location.hash === '#tv') start('tv'); else if (location.hash === '#pad') start('pad');
+else { setStatus(''); try { $('goTV').focus(); } catch(e){} }
+
+var started = false;
+function start(mode){
+  if (started) return; started = true;
+  $('menu').style.display = 'none';
+  if (mode === 'tv') startTV(); else startPad();
+}
+
+/* ======================= TV ======================= */
+function startTV(){
+  $('tv').style.display = 'block';
+  var players = [0,1,2].map(function(i){ return { x: (i - 1) * 3, z: 0, ang: 0, vx: 0, vy: 0, a: false, seen: 0, rtt: null }; });
+  var msgs = 0, lastCount = 0, rate = 0, mq = null, code = '';
+  setInterval(function(){ rate = msgs - lastCount; lastCount = msgs; }, 1000);
+
+  connectBroker(null, function(topic, s){
+    var d; try { d = JSON.parse(s); } catch(e){ return; }
+    if (!d || typeof d.p !== 'number' || d.p < 0 || d.p > 2) return;
+    var p = players[d.p];
+    p.vx = Math.max(-1, Math.min(1, +d.x || 0)); p.vy = Math.max(-1, Math.min(1, +d.y || 0));
+    p.a = !!d.a; p.seen = performance.now(); msgs++;
+    if (d.r) p.rtt = d.r;
+    if (d.t) mq.pub('casarefugio/' + code + '/tv', JSON.stringify({ p: d.p, t: d.t }));
+  }, function(m, idx){
+    if (!m) { setStatus('Não consegui conectar a nenhum servidor. A internet da TV funciona?'); $('code').textContent = 'ERRO'; return; }
+    mq = m;
+    code = String(idx + 1) + String(Math.floor(100 + Math.random() * 900));
+    $('code').textContent = 'Código: ' + code;
+    mq.sub('casarefugio/' + code + '/pad');
+  });
+
+  var has3D = typeof THREE !== 'undefined' && !!document.createElement('canvas').getContext('webgl');
+  var fps = 0, frames = 0, fpsT = performance.now(), last = fpsT;
+
+  function step(dt){
+    players.forEach(function(p){
+      p.ang -= p.vx * dt * 2.4;
+      var sp = -p.vy * dt * 4;
+      p.x += Math.sin(p.ang) * sp; p.z += Math.cos(p.ang) * sp;
+      p.x = Math.max(-18, Math.min(18, p.x)); p.z = Math.max(-18, Math.min(18, p.z));
+    });
+  }
+  function info(){
+    var now = performance.now();
+    var line2 = players.map(function(p, i){ var on = now - p.seen < 2000; return 'P' + (i + 1) + ': ' + (on ? (p.rtt != null ? p.rtt + 'ms' : 'ok') : '—'); }).join('   ');
+    setStatus('3D (WebGL): ' + (has3D ? 'SIM' : 'NÃO') + ' · ' + fps + ' fps · ' + rate + ' msg/s\n' + line2);
+  }
+
+  if (!has3D) { start2D(); return; }
+
+  var renderer = new THREE.WebGLRenderer({ antialias: false });
+  var SCALE = 0.75;
+  renderer.setPixelRatio(1);
+  $('tv').appendChild(renderer.domElement);
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87b5e0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.9));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(5, 10, 3); scene.add(sun);
+  var floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshLambertMaterial({ color: 0xc9a26b }));
+  floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  // a "house": walls and furniture boxes for a realistic load
+  var wallMat = new THREE.MeshLambertMaterial({ color: 0xf2efe6 });
+  function box(w, h, d, x, y, z, mat){ var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); scene.add(m); return m; }
+  box(40, 3, 0.3, 0, 1.5, -20, wallMat); box(40, 3, 0.3, 0, 1.5, 20, wallMat);
+  box(0.3, 3, 40, -20, 1.5, 0, wallMat); box(0.3, 3, 40, 20, 1.5, 0, wallMat);
+  box(0.3, 3, 14, -6, 1.5, -13, wallMat); box(0.3, 3, 14, 6, 1.5, 13, wallMat); box(14, 3, 0.3, 13, 1.5, -4, wallMat);
+  for (var i = 0; i < 80; i++) {
+    var c = new THREE.Color().setHSL(Math.random(), 0.4, 0.55);
+    box(0.5 + Math.random() * 2, 0.4 + Math.random() * 1.5, 0.5 + Math.random() * 2, (Math.random() - 0.5) * 36, 0.5, (Math.random() - 0.5) * 36, new THREE.MeshLambertMaterial({ color: c }));
+  }
+  var avatars = players.map(function(p, i){
+    var g = new THREE.Group();
+    var body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 16), new THREE.MeshLambertMaterial({ color: COLORS[i] }));
+    body.position.y = 0.6; g.add(body);
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshLambertMaterial({ color: 0xffe0bd }));
+    head.position.y = 1.5; g.add(head);
+    var nose = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.3), new THREE.MeshLambertMaterial({ color: 0x333333 }));
+    nose.position.set(0, 1.5, 0.35); g.add(nose);
+    scene.add(g); return g;
+  });
+  var cams = players.map(function(){ return new THREE.PerspectiveCamera(65, 1, 0.1, 100); });
+
+  function resize(){ renderer.setSize(Math.floor(innerWidth * SCALE), Math.floor(innerHeight * SCALE), false); }
+  addEventListener('resize', resize); resize();
+
+  function loop(now){
+    var dt = Math.min(0.05, (now - last) / 1000); last = now;
+    frames++; if (now - fpsT > 1000) { fps = frames; frames = 0; fpsT = now; info(); }
+    step(dt);
+    var W = Math.floor(innerWidth * SCALE), H = Math.floor(innerHeight * SCALE), w = Math.floor(W / 3);
+    renderer.setScissorTest(true);
+    players.forEach(function(p, i){
+      var g = avatars[i]; g.position.set(p.x, 0, p.z); g.rotation.y = p.ang;
+      g.scale.setScalar(p.a ? 1.4 : 1);
+      var cam = cams[i]; cam.aspect = w / H; cam.updateProjectionMatrix();
+      cam.position.set(p.x - Math.sin(p.ang) * 4, 3, p.z - Math.cos(p.ang) * 4);
+      cam.lookAt(p.x, 1.2, p.z);
+      renderer.setViewport(i * w, 0, w - 2, H); renderer.setScissor(i * w, 0, w - 2, H);
+      renderer.render(scene, cam);
+    });
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function start2D(){
+    var cv = document.createElement('canvas'); $('tv').appendChild(cv); var ctx = cv.getContext('2d');
+    function rs(){ cv.width = innerWidth; cv.height = innerHeight; } addEventListener('resize', rs); rs();
+    (function l2(now){
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      frames++; if (now - fpsT > 1000) { fps = frames; frames = 0; fpsT = now; info(); }
+      step(dt); ctx.fillStyle = '#14161c'; ctx.fillRect(0, 0, cv.width, cv.height);
+      players.forEach(function(p, i){ ctx.beginPath(); ctx.arc(cv.width / 2 + p.x * 20, cv.height / 2 + p.z * 20, p.a ? 30 : 18, 0, 7); ctx.fillStyle = '#' + COLORS[i].toString(16); ctx.fill(); });
+      requestAnimationFrame(l2);
+    })(performance.now());
+  }
+}
+
+/* ======================= PAD ======================= */
+function startPad(){
+  $('pad').style.display = 'flex';
+  setStatus('');
+  try { $('codeIn').value = localStorage.getItem('crCode') || ''; } catch(e){}
+  $('joinBtn').onclick = function(){
+    var code = $('codeIn').value.replace(/\D/g, '');
+    if (code.length !== 4 || code[0] < '1' || code[0] > '3') { setStatus('código inválido'); return; }
+    try { localStorage.setItem('crCode', code); } catch(e){}
+    var me = 0, x = 0, y = 0, a = false, rtt = 0, tilt = false, tilt0 = null, mq = null;
+    try { me = +(localStorage.getItem('crMe') || 0); } catch(e){}
+    connectBroker(+code[0] - 1, function(topic, s){
+      var d; try { d = JSON.parse(s); } catch(e){ return; }
+      if (d && d.p === me && d.t) rtt = Math.round(performance.now() - d.t);
+    }, function(m){
+      if (!m) { setStatus('não consegui conectar'); return; }
+      mq = m; mq.sub('casarefugio/' + code + '/tv');
+      $('join').style.display = 'none'; $('ctl').style.display = 'flex';
+      run();
+    });
+
+    function run(){
+      var btns = document.querySelectorAll('#players button');
+      function mark(){ for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('on', +btns[i].dataset.p === me); }
+      for (var i = 0; i < btns.length; i++) btns[i].onclick = function(){ me = +this.dataset.p; try{localStorage.setItem('crMe', me);}catch(e){} mark(); };
+      mark();
+
+      var stick = $('stick'), knob = $('knob'), sid = null;
+      function moveStick(cx, cy){
+        var r = stick.getBoundingClientRect();
+        var dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2);
+        var max = r.width / 2 - 20, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > max) { dx *= max / d; dy *= max / d; }
+        knob.style.left = (62 + dx) + 'px'; knob.style.top = (62 + dy) + 'px';
+        x = dx / max; y = dy / max;
+      }
+      stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; moveStick(t.clientX, t.clientY); }, { passive: false });
+      stick.addEventListener('touchmove', function(e){ e.preventDefault(); for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) moveStick(e.changedTouches[i].clientX, e.changedTouches[i].clientY); }, { passive: false });
+      function rel(e){ for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) { sid = null; x = y = 0; knob.style.left = knob.style.top = '62px'; } }
+      stick.addEventListener('touchend', rel); stick.addEventListener('touchcancel', rel);
+
+      var A = $('btnA');
+      A.addEventListener('touchstart', function(e){ e.preventDefault(); a = true; A.classList.add('down'); try{ navigator.vibrate(20); }catch(err){} }, { passive: false });
+      function up(){ a = false; A.classList.remove('down'); }
+      A.addEventListener('touchend', up); A.addEventListener('touchcancel', up);
+
+      $('tiltBtn').onclick = function(){
+        tilt = !tilt; tilt0 = null;
+        this.classList.toggle('on', tilt);
+        this.textContent = tilt ? 'Inclinar: LIGADO (segure o celular deitado, de lado)' : 'Inclinar: desligado';
+        if (!tilt) { x = y = 0; }
+      };
+      window.addEventListener('deviceorientation', function(e){
+        if (!tilt || e.beta == null) return;
+        if (!tilt0) tilt0 = { b: e.beta, g: e.gamma };
+        // phone held landscape: beta = steering (left/right), gamma = forward/back
+        var sx = (e.beta - tilt0.b) / 25, sy = (e.gamma - tilt0.g) / 25;
+        x = Math.max(-1, Math.min(1, sx)); y = Math.max(-1, Math.min(1, sy));
+        if (Math.abs(x) < 0.12) x = 0; if (Math.abs(y) < 0.12) y = 0;
+      });
+
+      var n = 0;
+      setInterval(function(){
+        n++;
+        var msg = { p: me, x: +x.toFixed(2), y: +y.toFixed(2), a: a };
+        if (n % 10 === 0) msg.t = performance.now();
+        if (rtt) msg.r = rtt;
+        mq.pub('casarefugio/' + code + '/pad', JSON.stringify(msg));
+        setStatus('controle P' + (me + 1) + ' · código ' + code + (rtt ? ' · atraso ' + rtt + ' ms' : ''));
+      }, 50);
+    }
+  };
+}
+</script>
+</body>
+</html>
