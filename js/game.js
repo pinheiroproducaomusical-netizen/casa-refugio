@@ -4,7 +4,7 @@ var GAME = (function(){
   var renderer, scene, house, mq = null, code = '';
   var slots = [null, null, null];
   var phase = 'lobby', round = 0, used = [], cur = null, roundT = 0, phaseT = 0, foundBy = null;
-  var hud = {}, scale = 0.75, fps = 60, fpsFrames = 0, fpsT = 0, lowT = 0;
+  var hud = {}, scale = /hq/.test(location.search) ? 1 : 0.75, fps = 60, fpsFrames = 0, fpsT = 0, lowT = 0;
   var sparkle, pongs = {}, dirty = true, lastPub = 0;
 
   function $(id){ return document.getElementById(id); }
@@ -14,16 +14,24 @@ var GAME = (function(){
   function start(opts){
     explore = !!(opts && opts.explore);
     $('tv').style.display = 'block';
-    renderer = new THREE.WebGLRenderer({ antialias: false });
+    var lite = /lite/.test(location.search);
+    renderer = new THREE.WebGLRenderer({ antialias: !lite });
+    renderer.shadowMap.enabled = !lite; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
     renderer.setPixelRatio(1);
     renderer.autoClear = false; renderer.info.autoReset = false;
     $('tv').appendChild(renderer.domElement);
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0xcfe0ea, 25, 70);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a66, 0.62));
-    var sun = new THREE.DirectionalLight(0xfff4e0, 0.42); sun.position.set(-6, 12, -8); scene.add(sun);
-    var fill = new THREE.DirectionalLight(0xffffff, 0.2); fill.position.set(10, 6, 14); scene.add(fill);
+    scene.add(new THREE.HemisphereLight(0xf2f4ff, 0x7a6a58, 0.7));
+    var sun = new THREE.DirectionalLight(0xffe6c0, 0.95);
+    sun.position.set(8 - 9, 10, 4 - 13); sun.target.position.set(8, 0, 4); scene.add(sun.target);
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+    var sc = sun.shadow.camera; sc.left = -17; sc.right = 17; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 45;
+    sun.shadow.bias = -0.0008; sun.shadow.normalBias = 0.03;
+    scene.add(sun);
+    var fill = new THREE.DirectionalLight(0xdfe8ff, 0.16); fill.position.set(10, 6, 14); scene.add(fill);
     house = HOUSE.build(scene);
+    renderer.shadowMap.needsUpdate = true;
     // sparkle (Aria's perk)
     sparkle = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkleTex(), transparent: true, depthTest: false, blending: THREE.AdditiveBlending }));
     sparkle.scale.set(0.8, 0.8, 1); sparkle.visible = false; sparkle.renderOrder = 20; scene.add(sparkle);
@@ -302,7 +310,7 @@ var GAME = (function(){
     requestAnimationFrame(loop);
     var dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
     fpsFrames++; if (now - fpsT > 1000) { fps = fpsFrames; fpsFrames = 0; fpsT = now; hud.fps.textContent = fps + ' fps · ' + Math.round(scale * 100) + '%';
-      if (fps < 28 && scale > 0.5) { lowT++; if (lowT >= 3) { scale = Math.max(0.5, scale - 0.1); resize(); lowT = 0; } } else lowT = 0; }
+      if (fps < 28 && scale > 0.5 && !/hq/.test(location.search)) { lowT++; if (lowT >= 3) { scale = Math.max(0.5, scale - 0.1); resize(); lowT = 0; } } else lowT = 0; }
     // drop players that went silent
     slots.forEach(function(p){ if (p && now - p.seen > 20000) removePlayer(p); });
     if (phase === 'round') { var hc = hintCount(); roundT += dt; if (hintCount() !== hc) dirty = true; }
