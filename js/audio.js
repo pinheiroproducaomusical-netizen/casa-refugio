@@ -27,12 +27,13 @@ var AUDIO = (function(){
     SYNTH.make(ctx, buffers);
     setListener(L.x, L.y, L.z, L.a);
     Object.keys(FILES).forEach(function(k){ load(k, 'snd/' + FILES[k] + '.mp3'); });
+    load('pant', 'snd/ofego.wav');
     setInterval(tick, 30);
   }
   function load(name, url){
     try {
       fetch(url).then(function(r){ if (!r.ok) throw 0; return r.arrayBuffer(); })
-        .then(function(ab){ ctx.decodeAudioData(ab, function(b){ buffers[name] = b; }, function(){}); })
+        .then(function(ab){ ctx.decodeAudioData(ab, function(b){ buffers[name] = b; if (name === 'pant') Object.keys(srcs).forEach(function(k){ var s = srcs[k]; if (s.loop) { try { s.loop.stop(); } catch (e) {} var lp = ctx.createBufferSource(); lp.buffer = b; lp.loop = true; lp.connect(s.loopGain); lp.start(); s.loop = lp; } }); }, function(){}); })
         .catch(function(){});
     } catch (e) {}
   }
@@ -118,7 +119,7 @@ var AUDIO = (function(){
       var f = s.o <= 0.01 ? 18000 : Math.max(500, 18000 * Math.pow(1 - s.o, 2.6));
       s.lpf.frequency.setTargetAtTime(f, ctx.currentTime, 0.05);
       s.gain.gain.setTargetAtTime(1 - s.o * 0.5, ctx.currentTime, 0.05);
-      if (s.loopGain) { var dx = s.cur[0] - L.x, dz = s.cur[2] - L.z, dd = Math.sqrt(dx * dx + dz * dz); s.loopGain.gain.setTargetAtTime(dd < 4.5 ? 0.18 * (1 - dd / 4.5) : 0, ctx.currentTime, 0.2); }
+      if (s.loopGain) { var dx = s.cur[0] - L.x, dz = s.cur[2] - L.z, dd = Math.sqrt(dx * dx + dz * dz); s.loopGain.gain.setTargetAtTime(dd < 4.5 ? 0.3 * (1 - dd / 4.5) : 0, ctx.currentTime, 0.2); }
       if (s.t === 'bark' && s.mv) { s.clickT -= 0.03; if (s.clickT <= 0) { trigger(s, 'click', 0.5 + Math.random() * 0.4); s.clickT = 0.13 + Math.random() * 0.06; } }
     });
   }
