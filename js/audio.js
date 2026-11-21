@@ -6,10 +6,13 @@ var AUDIO = (function(){
   var ctx = null, master = null, scene = null, buffers = {}, srcs = {}, roomId = null, room = null;
   var L = { x: 6, y: 1.6, z: 4, a: Math.PI / 2 };
   var TILE = 'polished-concrete-or-tile';
+  // Materials are chosen as *equivalent absorption* (the shoebox has no furniture, people or curtains),
+  // tuned so the RT60 (Eyring, as Resonance computes it) lands near real values at 500 Hz–2 kHz:
+  // living/kitchen ≈ 0.5–0.6 s, tiled bathroom ≈ 0.6–0.7 s, laundry ≈ 0.4 s.
   var ROOMS = {
-    main:    { x0: 0, x1: 16, z0: 0, z1: 11, h: 3.8, m: { left: 'plaster-smooth', right: 'glass-thick', front: 'glass-thick', back: 'plaster-smooth', down: TILE, up: 'wood-ceiling' } },
-    bath:    { x0: 0, x1: 3, z0: 6, z1: 11, h: 2.75, m: { left: TILE, right: TILE, front: TILE, back: TILE, down: TILE, up: 'plaster-smooth' } },
-    laundry: { x0: 3, x1: 4.6, z0: 8.8, z1: 11, h: 2.75, m: { left: TILE, right: TILE, front: 'plaster-smooth', back: TILE, down: TILE, up: 'plaster-smooth' } },
+    main:    { x0: 0, x1: 16, z0: 0, z1: 11, h: 3.8, m: { left: 'curtain-heavy', right: 'glass-thick', front: 'glass-thick', back: 'wood-panel', down: 'parquet-on-concrete', up: 'acoustic-ceiling-tiles' } },
+    bath:    { x0: 0, x1: 3, z0: 6, z1: 11, h: 2.75, m: { left: 'concrete-block-painted', right: 'concrete-block-painted', front: 'curtain-heavy', back: TILE, down: TILE, up: 'plywood-panel' } },
+    laundry: { x0: 3, x1: 4.6, z0: 8.8, z1: 11, h: 2.75, m: { left: 'curtain-heavy', right: 'plywood-panel', front: TILE, back: 'plywood-panel', down: TILE, up: 'plywood-panel' } },
     out:     { x0: -25, x1: 41, z0: -25, z1: 36, h: 30, m: { left: 'transparent', right: 'transparent', front: 'transparent', back: 'transparent', down: 'grass', up: 'transparent' } }
   };
   var FILES = { bark: 'latido', sabia: 'sabia', joao: 'joao', quero: 'quero', periquito: 'periquito', andorinha: 'andorinha', bemtevi: 'bemtevi' };
