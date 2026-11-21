@@ -67,8 +67,8 @@ function build(scene){
     g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     pushStatic(g, m);
     if (col && y0 <= 0.05) shade.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
-    if (col === 'w') walls.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
-    else if (col === 's') soft.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
+    if (col === 'w') walls.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1), h: y1 });
+    else if (col === 's') soft.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1), h: y1 });
   }
   // any geometry placed with transform
   function G(g, m, x, y, z, rx, ry, rz, s){
@@ -87,7 +87,7 @@ function build(scene){
   function cyl(rt, rb, h, seg){ return new THREE.CylinderGeometry(rt, rb, h, seg || 12); }
   function sph(r, ws, hs){ return new THREE.SphereGeometry(r, ws || 10, hs || 8); }
   function lathe(pts, seg){ return new THREE.LatheGeometry(pts.map(function(p){ return new THREE.Vector2(p[0], p[1]); }), seg || 16); }
-  function blockCircle(x, z, r, kind){ var b = { x0: x - r, x1: x + r, z0: z - r, z1: z + r }; (kind === 's' ? soft : walls).push(b); shade.push(b); }
+  function blockCircle(x, z, r, kind, h){ var b = { x0: x - r, x1: x + r, z0: z - r, z1: z + r, h: h || 99 }; (kind === 's' ? soft : walls).push(b); shade.push(b); }
   // rounded box (bevelled) by extents
   function RB(x0, x1, y0, y1, z0, z1, m, r, col){
     var w = x1 - x0, h = y1 - y0, d = z1 - z0; r = Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001);
@@ -96,7 +96,7 @@ function build(scene){
     g.translate(0, 0, -(d - 2 * r) / 2);
     if (m.userData.tile) { var uv = g.attributes.uv.array; for (var i = 0; i < uv.length; i++) uv[i] /= m.userData.tile; }
     G(g, m, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-    var rc = { x0: x0, x1: x1, z0: z0, z1: z1 };
+    var rc = { x0: x0, x1: x1, z0: z0, z1: z1, h: y1 };
     if (col === 'w') walls.push(rc); else if (col === 's') soft.push(rc);
     if (col && y0 <= 0.05) shade.push(rc);
   }
@@ -288,11 +288,11 @@ function build(scene){
   B(3.0, 4.6, 0, H1, 8.8, 8.9, M.wall, 'w');
   B(4.55, 4.65, 0, H1, 8.8, 9.2, M.wall, 'w'); B(4.55, 4.65, 0, H1, 10.0, 11, M.wall, 'w'); B(4.55, 4.65, 2.1, H1, 9.2, 10.0, M.wall);
   B(3.05, 3.65, 0, 0.85, 10.35, 10.98, M.white, 'w'); B(3.1, 3.6, 0.8, 0.86, 10.4, 10.9, M.steel);   // tank
-  G(cyl(0.27, 0.25, 0.85, 16), M.white, 3.95, 0.43, 10.65); blockCircle(3.95, 10.65, 0.28);           // tanquinho
+  G(cyl(0.27, 0.25, 0.85, 16), M.white, 3.95, 0.43, 10.65); blockCircle(3.95, 10.65, 0.28, 'w', 0.87);           // tanquinho
   G(cyl(0.2, 0.2, 0.05, 16), L(0x7fc7e0), 3.95, 0.87, 10.65);
   B(3.3, 3.7, 1.55, 2.15, 10.9, 11.0, M.white); D('z-', 3.36, 3.64, 1.95, 2.05, 10.89, M.red);         // Rinnai heater
   G(cyl(0.04, 0.04, 0.6, 8), M.steel, 3.5, 2.45, 10.95);
-  G(cyl(0.22, 0.2, 0.6, 12), M.black, 3.3, 0.3, 9.2); blockCircle(3.3, 9.2, 0.22);                       // bin
+  G(cyl(0.22, 0.2, 0.6, 12), M.black, 3.3, 0.3, 9.2); blockCircle(3.3, 9.2, 0.22, 'w', 0.6);                       // bin
   B(3.05, 3.08, 1.1, 1.8, 9.3, 9.6, M.red);                                                               // dustpan/towel
 
   /* =========================================================
@@ -343,7 +343,7 @@ function build(scene){
     G(cyl(0.2, 0.2, 0.06, 14), L(0x4a3428), x, 0.76, 5.95); G(cyl(0.2, 0.18, 0.28, 14, 1), L(0x4a3428), x, 0.92, 6.12);
     G(cyl(0.025, 0.025, 0.74, 6), M.steel, x, 0.37, 5.95); G(new THREE.TorusGeometry(0.2, 0.015, 5, 16), M.steel, x, 0.3, 5.95, Math.PI / 2, 0, 0);
     G(new THREE.TorusGeometry(0.22, 0.015, 5, 16), M.steel, x, 0.02, 5.95, Math.PI / 2, 0, 0);
-    soft.push({ x0: x - 0.22, x1: x + 0.22, z0: 5.73, z1: 6.17 });
+    soft.push({ x0: x - 0.22, x1: x + 0.22, z0: 5.73, z1: 6.17, h: 0.8 });
   });
   B(6.48, 6.9, 0.75, 1.05, 6.02, 6.12, L(0xcbb6dc));    // lilac towel over a stool
   // red pendant lamps + track lights
@@ -359,7 +359,7 @@ function build(scene){
   var TX = 13.6, TZ = 8.9;
   G(cyl(1.05, 1.05, 0.05, 32), M.woodTop, TX, 0.76, TZ); G(cyl(0.12, 0.18, 0.72, 10), M.woodTop, TX, 0.37, TZ); G(cyl(0.45, 0.45, 0.04, 16), M.woodTop, TX, 0.02, TZ);
   G(cyl(0.55, 0.55, 0.03, 28), M.woodLight, TX, 0.8, TZ);
-  soft.push({ x0: TX - 0.9, x1: TX + 0.9, z0: TZ - 0.9, z1: TZ + 0.9 });
+  soft.push({ x0: TX - 0.9, x1: TX + 0.9, z0: TZ - 0.9, z1: TZ + 0.9, h: 0.79 });
   for (var c = 0; c < 8; c++) {
     var a = c / 8 * Math.PI * 2 + 0.2, cx = TX + Math.cos(a) * 1.3, cz = TZ + Math.sin(a) * 1.3;
     chair(cx, cz, -a - Math.PI / 2);
@@ -371,7 +371,7 @@ function build(scene){
     var bk = new THREE.BoxGeometry(0.42, 0.06, 0.03); bk.translate(0, 0.95, 0.19); parts.push(bk);
     for (var k = -2; k <= 2; k++) { var sl = new THREE.BoxGeometry(0.03, 0.5, 0.025); sl.translate(k * 0.08, 0.7, 0.19); parts.push(sl); }
     parts.forEach(function(g){ G(g, M.woodTop, cx, 0, cz, 0, ry, 0); });
-    soft.push({ x0: cx - 0.22, x1: cx + 0.22, z0: cz - 0.22, z1: cz + 0.22 });
+    soft.push({ x0: cx - 0.22, x1: cx + 0.22, z0: cz - 0.22, z1: cz + 0.22, h: 0.47 });
   }
   G(lathe([[0, 0], [0.2, 0.0], [0.3, 0.08], [0.32, 0.12], [0.28, 0.1], [0.18, 0.04], [0, 0.04]], 20), M.bowl, TX, 0.82, TZ);
   G(sph(0.06, 8, 6), L(0xd8a95a), TX - 0.05, 0.88, TZ); G(sph(0.05, 8, 6), L(0xc98a4a), TX + 0.08, 0.88, TZ + 0.04);
@@ -412,7 +412,7 @@ function build(scene){
   G(cyl(0.01, 0.01, 0.75, 4), M.black, 7.45, 0.38, 1.6); G(cyl(0.12, 0.14, 0.02, 8), M.black, 7.45, 0.01, 1.6);
   for (var ft = 0; ft < 3; ft++) G(cyl(0.006, 0.006, 0.6, 4), M.black, 7.42 + ft * 0.03, 0.4, 1.62);
   // sofa (L) facing the TV, back toward the dining
-  RB(9.5, 12.9, 0.04, 0.42, 3.65, 4.62, M.sofa, 0.06, 'w'); RB(9.5, 12.9, 0.36, 0.9, 4.28, 4.66, M.sofa, 0.09);
+  RB(9.5, 12.9, 0.04, 0.42, 3.65, 4.62, M.sofa, 0.06, 'w'); RB(9.5, 12.9, 0.36, 0.9, 4.28, 4.66, M.sofa, 0.09, 'w');
   RB(9.32, 9.6, 0.04, 0.64, 3.62, 4.66, M.sofa, 0.08); RB(12.0, 12.95, 0.04, 0.42, 2.3, 3.7, M.sofa, 0.06, 'w');
   B(9.55, 12.9, 0, 0.05, 3.7, 4.6, M.black); B(12.05, 12.9, 0, 0.05, 2.35, 3.65, M.black);
   for (var cu = 0; cu < 4; cu++) { var cg = new THREE.Group(); RB(-0.36, 0.36, -0.24, 0.24, -0.1, 0.1, M.stripes, 0.07); var last = statics.pop(); last.g.applyMatrix4(new THREE.Matrix4().makeRotationX(-0.22)); last.g.translate(9.95 + cu * 0.78, 0.68, 4.15); statics.push(last); }
@@ -420,7 +420,7 @@ function build(scene){
   G(sph(0.12, 8, 6), L(0xc9a07a), 12.5, 0.55, 3.0); G(sph(0.09, 8, 6), L(0xe8c3c8), 10.2, 0.55, 3.9);   // plush toys
   // round trunk coffee table + plant
   G(cyl(0.42, 0.42, 0.08, 18), M.woodLight, 10.5, 0.45, 2.3); G(cyl(0.12, 0.16, 0.42, 10), M.woodTop, 10.5, 0.21, 2.3);
-  blockCircle(10.5, 2.3, 0.4, 's');
+  blockCircle(10.5, 2.3, 0.4, 's', 0.49);
   G(cyl(0.06, 0.05, 0.12, 10), M.offwhite, 10.5, 0.55, 2.3); for (var pk = 0; pk < 4; pk++) G(new THREE.ConeGeometry(0.02, 0.45, 4), M.plant, 10.5 + (pk - 1.5) * 0.03, 0.8, 2.3, 0, 0, (pk - 1.5) * 0.25);
   // kids play mat near the glass corner
   B(12.9, 15.4, 0, 0.012, 0.4, 2.4, M.playmat);
@@ -433,7 +433,7 @@ function build(scene){
   }
   crate(6.3, 2.5); crate(14.9, 0.55);
   G(cyl(0.18, 0.13, 0.32, 12), M.terracotta, 5.4, 0.16, 0.6); for (var cr = 0; cr < 6; cr++) G(new THREE.ConeGeometry(0.06, 0.3, 4), cr % 2 ? L(0xc2702a) : L(0x7a8a2a), 5.4 + Math.cos(cr) * 0.08, 0.5, 0.6 + Math.sin(cr) * 0.08, 0.4 * Math.cos(cr), 0, 0.4 * Math.sin(cr));
-  blockCircle(5.4, 0.6, 0.2);
+  blockCircle(5.4, 0.6, 0.2, 'w', 0.32);
 
   /* =========================================================
      OUTSIDE: veranda, lawn, deck, shed, trees

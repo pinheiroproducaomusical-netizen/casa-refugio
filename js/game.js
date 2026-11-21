@@ -52,7 +52,11 @@ var GAME = (function(){
   function startExplore(){
     var chIdx = 0, x = 0, y = 0, sid = null, stick = $('xstick'), knob = $('xknob'), aDown = false, st = 0;
     $('explore').style.display = 'block';
-    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown }; if (st > 0) { m.st = 1; m.gm = gm; st--; } onMsg('l', JSON.stringify(m)); }
+    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown, j: jDown }; if (st > 0) { m.st = 1; m.gm = gm; st--; } onMsg('l', JSON.stringify(m)); }
+    var jDown = false, xj = $('xJ');
+    xj.addEventListener('touchstart', function(e){ e.preventDefault(); jDown = true; xj.classList.add('down'); try { navigator.vibrate(15); } catch (err) {} }, { passive: false });
+    xj.addEventListener('touchend', function(){ jDown = false; xj.classList.remove('down'); });
+    xj.addEventListener('mousedown', function(){ jDown = true; }); xj.addEventListener('mouseup', function(){ jDown = false; });
     var xa = $('xA');
     xa.addEventListener('touchstart', function(e){ e.preventDefault(); aDown = true; xa.classList.add('down'); try { navigator.vibrate(22); } catch (err) {} }, { passive: false });
     xa.addEventListener('touchend', function(){ aDown = false; xa.classList.remove('down'); });
@@ -108,6 +112,7 @@ var GAME = (function(){
     p.seen = performance.now();
     p.ix = clamp(+d.x || 0, -1, 1); p.iy = clamp(+d.y || 0, -1, 1);
     var a = !!d.a; if (a && !p.a) p.press = true; p.a = a;
+    var j = !!d.j; if (j && !p.j) p.jump = true; p.j = j;
     if (d.st && (phase === 'lobby' || phase === 'end')) startGame(d.gm === 'marshal' ? 'marshal' : 'sumiu');
     if (d.lv) { removePlayer(p); return; }
     if (d.t) pongs[d.id] = d.t;
@@ -148,10 +153,18 @@ var GAME = (function(){
   }
   function removePlayer(p){ scene.remove(p.model.root); slots[p.slot] = null; dirty = true; }
 
-  function blocked(x, z, r, baby){
+  var STEP = 0.12;
+  function blocked(x, z, r, baby, y){
+    y = y || 0;
     var lists = baby ? [house.walls] : [house.walls, house.soft];
-    for (var l = 0; l < lists.length; l++) { var L = lists[l]; for (var i = 0; i < L.length; i++) { var b = L[i]; if (x + r > b.x0 && x - r < b.x1 && z + r > b.z0 && z - r < b.z1) return true; } }
+    for (var l = 0; l < lists.length; l++) { var L = lists[l]; for (var i = 0; i < L.length; i++) { var b = L[i]; if (x + r > b.x0 && x - r < b.x1 && z + r > b.z0 && z - r < b.z1 && (b.h === undefined ? 99 : b.h) > y + STEP) return true; } }
     return x < r || x > 16 - r || z < r || z > 11 - r;
+  }
+  // height of whatever the character is standing on (sofa, chair, hot-tub deck...)
+  function groundAt(x, z, r, baby, y){
+    var g = 0, lists = baby ? [house.walls] : [house.walls, house.soft];
+    for (var l = 0; l < lists.length; l++) { var L = lists[l]; for (var i = 0; i < L.length; i++) { var b = L[i], h = b.h === undefined ? 99 : b.h; if (h > g && h <= y + STEP && x + r * 0.6 > b.x0 && x - r * 0.6 < b.x1 && z + r * 0.6 > b.z0 && z - r * 0.6 < b.z1) g = h; } }
+    return g;
   }
   function wallAt(x, z){
     var W = house.walls; for (var i = 0; i < W.length; i++) { var b = W[i]; if (x > b.x0 - 0.08 && x < b.x1 + 0.08 && z > b.z0 - 0.08 && z < b.z1 + 0.08) return true; }
@@ -165,13 +178,20 @@ var GAME = (function(){
     var sp = -ty * p.info.speed; if (sp < 0) sp *= 0.5;
     if (p.searchT > 0) sp = 0;
     var dx = Math.cos(p.ang) * sp * dt, dz = Math.sin(p.ang) * sp * dt, baby = p.ch === 'joao';
+    // jump + gravity
+    if (p.y === undefined) { p.y = 0; p.vy = 0; }
+    var g0 = groundAt(p.x, p.z, p.r, baby, p.y);
+    if (p.jump) { p.jump = false; if (p.y - g0 < 0.03) { p.vy = p.info.kind === 'adult' ? 4.0 : 3.6; buzz(p, 12); } }
+    p.vy -= 12 * dt; p.y += p.vy * dt;
     var hit = false;
-    if (!blocked(p.x + dx, p.z, p.r, baby)) p.x += dx; else if (Math.abs(dx) > 0.001) hit = true;
-    if (!blocked(p.x, p.z + dz, p.r, baby)) p.z += dz; else if (Math.abs(dz) > 0.001) hit = true;
+    if (!blocked(p.x + dx, p.z, p.r, baby, p.y)) p.x += dx; else if (Math.abs(dx) > 0.001) hit = true;
+    if (!blocked(p.x, p.z + dz, p.r, baby, p.y)) p.z += dz; else if (Math.abs(dz) > 0.001) hit = true;
+    var g1 = groundAt(p.x, p.z, p.r, baby, p.y);
+    if (p.y <= g1) { if (p.vy < -3.5) buzz(p, 15); p.y = g1; p.vy = 0; }
     p.bumpT = (p.bumpT || 0) - dt;
     if (hit && p.bumpT <= 0) { p.bump = (p.bump || 0) + 1; p.bumpT = 0.5; dirty = true; buzz(p, 25); }
     p.speedNow = Math.abs(sp) / p.info.speed;
-    var m = p.model.root; m.position.set(p.x, 0, p.z); m.rotation.y = -p.ang + Math.PI / 2;
+    var m = p.model.root; m.position.set(p.x, p.y, p.z); m.rotation.y = -p.ang + Math.PI / 2;
     p.model.animate(dt, p.speedNow + (p.searchT > 0 ? 0.6 : 0));
     // nearest search spot (game 1) / Marshal in reach (game 2)
     p.nearSpot = null; var best = SEARCH_R;
@@ -200,9 +220,10 @@ var GAME = (function(){
     var fx = Math.cos(p.camAng), fz = Math.sin(p.camAng), want = dist;
     for (var t = 0.3; t <= dist; t += 0.08) { if (wallAt(p.x - fx * t, p.z - fz * t)) { want = Math.max(0.3, t - 0.15); break; } }
     p.camDist += (want - p.camDist) * Math.min(1, dt * (want < p.camDist ? 14 : 2));
-    var cy = hgt; if (p.z - fz * p.camDist > 6.45 || p.z > 6.45) cy = Math.min(cy, 2.45);
+    p.camY = p.camY === undefined ? p.y : p.camY + (p.y - p.camY) * Math.min(1, dt * 6);
+    var cy = hgt + p.camY * 0.7; if (p.z - fz * p.camDist > 6.45 || p.z > 6.45) cy = Math.min(cy, 2.45);
     p.cam.position.set(p.x - fx * p.camDist, cy, p.z - fz * p.camDist);
-    p.cam.lookAt(p.x + fx * 1.2, p.info.cam * 0.8, p.z + fz * 1.2);
+    p.cam.lookAt(p.x + fx * 1.2, p.info.cam * 0.8 + p.camY * 0.7, p.z + fz * 1.2);
   }
   function say(p, text, sec){ p.msg = text; p.msgT = sec; dirty = true; }
   function buzz(p, pat){ if (explore && p.id === 'me') { try { navigator.vibrate(pat); } catch (e) {} } }
@@ -288,7 +309,7 @@ var GAME = (function(){
   var GS = 0.25, GX = 64, GZ = 44;
   function buildGrid(){
     grid = new Uint8Array(GX * GZ);
-    for (var j = 0; j < GZ; j++) for (var i = 0; i < GX; i++) grid[j * GX + i] = blocked((i + 0.5) * GS, (j + 0.5) * GS, 0.17, true) ? 0 : 1;
+    for (var j = 0; j < GZ; j++) for (var i = 0; i < GX; i++) grid[j * GX + i] = blocked((i + 0.5) * GS, (j + 0.5) * GS, 0.17, true, 0) ? 0 : 1;
     HIDES = HIDES.filter(function(h){ return grid[cellOf(h[0], h[1])]; });
   }
   function cellOf(x, z){ return clamp(Math.floor(z / GS), 0, GZ - 1) * GX + clamp(Math.floor(x / GS), 0, GX - 1); }

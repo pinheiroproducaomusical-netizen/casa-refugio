@@ -1,7 +1,7 @@
 /* Phone controller */
 var PAD = (function(){
   function $(id){ return document.getElementById(id); }
-  var myId, code, mq = null, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
+  var myId, code, mq = null, jmp = false, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
   try { myId = localStorage.getItem('crId'); } catch (e) {}
   if (!myId) { myId = 'p' + Math.random().toString(36).slice(2, 9); try { localStorage.setItem('crId', myId); } catch (e) {} }
 
@@ -63,6 +63,10 @@ var PAD = (function(){
     stick.addEventListener('touchmove', function(e){ e.preventDefault(); for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) mv(e.changedTouches[i].clientX, e.changedTouches[i].clientY); }, { passive: false });
     stick.addEventListener('touchend', function(e){ for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) rel(); });
     stick.addEventListener('touchcancel', rel);
+    var J = $('btnJ');
+    J.addEventListener('touchstart', function(e){ e.preventDefault(); jmp = true; J.classList.add('down'); buzz(15); }, { passive: false });
+    function upJ(){ jmp = false; J.classList.remove('down'); }
+    J.addEventListener('touchend', upJ); J.addEventListener('touchcancel', upJ);
     var A = $('btnA');
     A.addEventListener('touchstart', function(e){ e.preventDefault(); a = true; A.classList.add('down'); buzz(22); }, { passive: false });
     function up(){ a = false; A.classList.remove('down'); }
@@ -74,7 +78,7 @@ var PAD = (function(){
 
   function send(){
     if (!mq) return;
-    var msg = { id: myId, x: +x.toFixed(2), y: +y.toFixed(2), a: a };
+    var msg = { id: myId, x: +x.toFixed(2), y: +y.toFixed(2), a: a, j: jmp };
     if (ch && leaveN <= 0) msg.ch = ch;
     if (startN > 0) { msg.st = 1; msg.gm = gmSel; startN--; }
     if (leaveN > 0) { msg.lv = 1; leaveN--; }

@@ -50,7 +50,8 @@
   #xstarts button{display:block;margin-bottom:8px;font-size:16px;padding:10px 14px;border-radius:12px;border:0;color:#fff;font-weight:bold;background:#2fbf71}
   #xstart2{background:#e0883d !important}
   #xA{position:absolute;right:28px;bottom:40px;width:96px;height:96px;border-radius:50%;border:0;background:rgba(224,83,61,.9);color:#fff;font-size:32px;font-weight:bold;pointer-events:auto;touch-action:none}
-  #xA.down{filter:brightness(1.5)}
+  #xA.down,#xJ.down{filter:brightness(1.5)}
+  #xJ{position:absolute;right:138px;bottom:28px;width:70px;height:70px;border-radius:50%;border:0;background:rgba(58,123,213,.9);color:#fff;font-size:26px;font-weight:bold;pointer-events:auto;touch-action:none}
   .panel.solo{padding:10px 12px}
   .panel.solo .round{font-size:12px}.panel.solo .missing{font-size:19px;margin:4px 0 8px}
   .panel.solo .hint{font-size:14px;padding:6px 8px;margin:6px 0}.panel.solo .next{font-size:11px}
@@ -83,7 +84,8 @@
   #knob{width:86px;height:86px;border-radius:50%;background:#5b8cff;position:absolute;left:59px;top:59px;pointer-events:none}
   #abox{text-align:center;width:130px}
   #btnA{width:120px;height:120px;border-radius:50%;font-size:36px;background:#e0533d;border:0;color:#fff;touch-action:none;font-weight:bold}
-  #btnA.down{filter:brightness(1.5)}
+  #btnA.down,#btnJ.down{filter:brightness(1.5)}
+  #btnJ{width:76px;height:76px;border-radius:50%;font-size:26px;background:#3a7bd5;border:0;color:#fff;touch-action:none;font-weight:bold;display:block;margin:0 auto 12px}
   #aLabel{font-size:13px;min-height:34px;margin-top:6px;color:#ffb3a7}
 </style>
 </head>
@@ -104,6 +106,7 @@
   <div id="xstick"><div id="xknob"></div></div>
   <button id="xchar"></button>
   <div id="xstarts"><button id="xstart1">🔎 Sumiu!</button><button id="xstart2">🐶 Cadê o Marshal?</button></div>
+  <button id="xJ">J</button>
   <button id="xA">A</button>
 </div>
 
@@ -128,20 +131,20 @@
     </div>
     <div id="controls">
       <div id="stick"><div id="knob"></div></div>
-      <div id="abox"><button id="btnA">A</button><div id="aLabel"></div></div>
+      <div id="abox"><button id="btnJ">J</button><button id="btnA">A</button><div id="aLabel"></div></div>
     </div>
   </div>
 </div>
 
 <script src="lib/three.min.js"></script>
-<script src="js/net.js?v=9"></script>
-<script src="js/tex.js?v=9"></script>
-<script src="js/chars.js?v=9"></script>
-<script src="js/data.js?v=9"></script>
-<script src="js/house.js?v=9"></script>
-<script src="js/game.js?v=9"></script>
-<script src="js/audio.js?v=9"></script>
-<script src="js/pad.js?v=9"></script>
+<script src="js/net.js?v=10"></script>
+<script src="js/tex.js?v=10"></script>
+<script src="js/chars.js?v=10"></script>
+<script src="js/data.js?v=10"></script>
+<script src="js/house.js?v=10"></script>
+<script src="js/game.js?v=10"></script>
+<script src="js/audio.js?v=10"></script>
+<script src="js/pad.js?v=10"></script>
 <script>
   var started = false;
   function go(mode){
