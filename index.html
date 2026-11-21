@@ -58,6 +58,8 @@
   #xknob{position:absolute;left:47px;top:47px;width:70px;height:70px;border-radius:50%;background:rgba(91,140,255,.85);pointer-events:none}
   #xchar{position:absolute;right:14px;top:14px;pointer-events:auto;font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:rgba(20,24,32,.7);color:#fff}
   #xstarts{position:absolute;left:14px;top:14px;pointer-events:auto}
+  #xmenu{position:absolute;right:14px;top:60px;pointer-events:auto;font-size:14px;padding:8px 12px;border-radius:12px;border:0;background:rgba(20,24,32,.75);color:#fff}
+  #xstarts{z-index:2;background:rgba(20,24,32,.0)}
   #xstarts button{display:block;margin-bottom:8px;font-size:16px;padding:10px 14px;border-radius:12px;border:0;color:#fff;font-weight:bold;background:#2fbf71}
   #xstart2{background:#e0883d !important}#xstart3{background:#3a9bd5 !important}
   #xhear{position:absolute;left:14px;top:14px;pointer-events:auto;font-size:15px;padding:9px 12px;border-radius:12px;border:0;background:#3a9bd5;color:#fff;font-weight:bold}
@@ -118,7 +120,8 @@
 <div id="explore" style="display:none">
   <div id="xstick"><div id="xknob"></div></div>
   <button id="xchar"></button>
-  <div id="xstarts"><button id="xstart1">🔎 Sumiu!</button><button id="xstart2">🐶 Cadê o Marshal?</button><button id="xstart3">🐦 Passarinhos</button></div>
+  <button id="xmenu" style="display:none">🎮 Trocar jogo</button>
+  <div id="xstarts"><button id="xstart1">🔎 Sumiu!</button><button id="xstart2">🐶 Cadê o Marshal?</button><button id="xstart3">🐦 Passarinhos</button><button id="xhome" style="display:none;background:#555 !important">🏠 Voltar ao início</button></div>
   <button id="xhear" style="display:none">🔊 Ouvir o canto</button>
   <div id="flash"></div>
   <button id="xJ">J</button>
@@ -136,7 +139,7 @@
     <div id="chars"></div>
   </div>
   <div id="ctl" style="display:none">
-    <div id="top"><span id="meName"></span><span id="meScore"></span></div>
+    <div id="top"><span id="meName"></span><button id="menuBtn" style="display:none;margin-left:10px;font-size:14px;padding:7px 10px;border-radius:10px;border:0;background:#444;color:#fff">🎮 Trocar jogo</button><span id="meScore"></span></div>
     <div id="info"></div>
     <div id="meMsg"></div>
     <div style="text-align:center"><button id="hearBtn" style="display:none;font-size:16px;padding:10px 16px;border-radius:12px;border:0;background:#3a9bd5;color:#fff;margin:4px">🔊 Ouvir o canto</button></div>
@@ -145,6 +148,7 @@
       <button id="startBtn2" style="background:#e0883d">🐶 Cadê o Marshal?</button>
       <button id="startBtn3" style="background:#3a9bd5">🐦 Passarinhos</button>
       <button id="swapBtn" style="background:#555">Trocar personagem</button>
+      <button id="homeBtn" style="background:#555;display:none">🏠 Voltar ao início</button>
     </div>
     <div id="controls">
       <div id="stick"><div id="knob"></div></div>
@@ -156,16 +160,16 @@
 <script src="lib/three.min.js"></script>
 <script src="lib/qrcode.js"></script>
 <script src="lib/resonance-audio.min.js"></script>
-<script src="js/net.js?v=16"></script>
-<script src="js/tex.js?v=16"></script>
-<script src="js/chars.js?v=16"></script>
-<script src="js/data.js?v=16"></script>
-<script src="js/house.js?v=16"></script>
-<script src="js/game.js?v=16"></script>
-<script src="js/audio.js?v=16"></script>
-<script src="js/pad.js?v=16"></script>
+<script src="js/net.js?v=17"></script>
+<script src="js/tex.js?v=17"></script>
+<script src="js/chars.js?v=17"></script>
+<script src="js/data.js?v=17"></script>
+<script src="js/house.js?v=17"></script>
+<script src="js/game.js?v=17"></script>
+<script src="js/audio.js?v=17"></script>
+<script src="js/pad.js?v=17"></script>
 <script>
-  var VERSION = 16;
+  var VERSION = 17;
   var started = false;
   function go(mode){
     if (started) return; started = true;

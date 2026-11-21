@@ -1,7 +1,7 @@
 /* Phone controller */
 var PAD = (function(){
   function $(id){ return document.getElementById(id); }
-  var myId, code, mq = null, pose = null, tg = null, jmp = false, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
+  var myId, code, mq = null, sq = Date.now() % 100000, menuOpen = false, pose = null, tg = null, jmp = false, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
   try { myId = localStorage.getItem('crId'); } catch (e) {}
   if (!myId) { myId = 'p' + Math.random().toString(36).slice(2, 9); try { localStorage.setItem('crId', myId); } catch (e) {} }
 
@@ -72,9 +72,11 @@ var PAD = (function(){
     A.addEventListener('touchstart', function(e){ e.preventDefault(); a = true; A.classList.add('down'); buzz(22); }, { passive: false });
     function up(){ a = false; A.classList.remove('down'); }
     A.addEventListener('touchend', up); A.addEventListener('touchcancel', up);
-    $('startBtn').onclick = function(){ gmSel = 'sumiu'; startN = 4; buzz(12); AUDIO.init(); };
-    $('startBtn2').onclick = function(){ gmSel = 'marshal'; startN = 4; buzz(12); AUDIO.init(); };
-    $('startBtn3').onclick = function(){ gmSel = 'aves'; startN = 4; buzz(12); AUDIO.init(); };
+    $('startBtn').onclick = function(){ gmSel = 'sumiu'; sq++; menuOpen = false; startN = 4; buzz(12); AUDIO.init(); };
+    $('startBtn2').onclick = function(){ gmSel = 'marshal'; sq++; menuOpen = false; startN = 4; buzz(12); AUDIO.init(); };
+    $('startBtn3').onclick = function(){ gmSel = 'aves'; sq++; menuOpen = false; startN = 4; buzz(12); AUDIO.init(); };
+    $('menuBtn').onclick = function(){ menuOpen = !menuOpen; buzz(10); render(); };
+    $('homeBtn').onclick = function(){ gmSel = 'home'; sq++; menuOpen = false; startN = 4; buzz(12); render(); };
     $('hearBtn').onclick = function(){ AUDIO.init(); if (tg) AUDIO.preview(tg); };
     // listener prediction: apply this phone's own joystick right away, the TV's updates correct it
     setInterval(function(){
@@ -92,7 +94,7 @@ var PAD = (function(){
     if (!mq) return;
     var msg = { id: myId, x: +x.toFixed(2), y: +y.toFixed(2), a: a, j: jmp };
     if (ch && leaveN <= 0) msg.ch = ch;
-    if (startN > 0) { msg.st = 1; msg.gm = gmSel; startN--; }
+    if (startN > 0) { msg.st = 1; msg.gm = gmSel; msg.sq = sq; startN--; }
     if (leaveN > 0) { msg.lv = 1; leaveN--; }
     if (Math.random() < 0.1) msg.t = performance.now();
     if (!ch && leaveN <= 0) return;
@@ -124,7 +126,9 @@ var PAD = (function(){
     var nh = (state.hints || []).length; if (state.ph === 'round' && nh > lastHints) buzz([40, 40, 40]); lastHints = state.ph === 'round' ? nh : 0;
     if (ch && !me && taken[ch]) { ch = null; show('choose'); status('Esse personagem já foi escolhido.'); return; }
     var lobby = state.ph === 'lobby', end = state.ph === 'end';
-    $('lobbyBtns').style.display = (lobby || end) ? 'flex' : 'none';
+    $('lobbyBtns').style.display = (lobby || end || menuOpen) ? 'flex' : 'none';
+    $('menuBtn').style.display = (lobby || end) ? 'none' : 'inline-block'; $('menuBtn').textContent = menuOpen ? '✕ Fechar' : '🎮 Trocar jogo';
+    $('homeBtn').style.display = menuOpen && !lobby ? 'block' : 'none';
     $('startBtn').textContent = '🔎 Sumiu!'; $('startBtn2').textContent = '🐶 Cadê o Marshal?'; $('startBtn3').textContent = '🐦 Passarinhos';
     $('swapBtn').style.display = lobby ? 'block' : 'none';
     $('startBtn2').style.display = 'block'; $('startBtn3').style.display = 'block';

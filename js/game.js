@@ -52,7 +52,8 @@ var GAME = (function(){
   function startExplore(){
     var chIdx = 0, x = 0, y = 0, sid = null, stick = $('xstick'), knob = $('xknob'), aDown = false, st = 0;
     $('explore').style.display = 'block';
-    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown, j: jDown }; if (st > 0) { m.st = 1; m.gm = gm; st--; } onMsg('l', JSON.stringify(m)); }
+    var sq = 0;
+    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown, j: jDown }; if (st > 0) { m.st = 1; m.gm = gm; m.sq = sq; st--; } onMsg('l', JSON.stringify(m)); }
     var jDown = false, xj = $('xJ');
     xj.addEventListener('touchstart', function(e){ e.preventDefault(); jDown = true; xj.classList.add('down'); try { navigator.vibrate(15); } catch (err) {} }, { passive: false });
     xj.addEventListener('touchend', function(){ jDown = false; xj.classList.remove('down'); });
@@ -62,12 +63,15 @@ var GAME = (function(){
     xa.addEventListener('touchend', function(){ aDown = false; xa.classList.remove('down'); });
     xa.addEventListener('mousedown', function(){ aDown = true; }); xa.addEventListener('mouseup', function(){ aDown = false; });
     var gm = 'sumiu';
-    $('xstart1').onclick = function(){ gm = 'sumiu'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
-    $('xstart2').onclick = function(){ gm = 'marshal'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
-    $('xstart3').onclick = function(){ gm = 'aves'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    $('xstart1').onclick = function(){ gm = 'sumiu'; sq++; st = 2; menuOpen = false; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    $('xstart2').onclick = function(){ gm = 'marshal'; sq++; st = 2; menuOpen = false; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    $('xstart3').onclick = function(){ gm = 'aves'; sq++; st = 2; menuOpen = false; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
     $('xhear').onclick = function(){ AUDIO.init(); if (cur && cur.sp) AUDIO.preview(cur.sp); };
     setInterval(function(){ $('xhear').style.display = mode === 'aves' && phase === 'round' ? 'block' : 'none'; }, 300);
-    setInterval(function(){ var show = (phase === 'lobby' || phase === 'end') ? 'block' : 'none'; $('xstarts').style.display = show; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
+    var menuOpen = false;
+    $('xmenu').onclick = function(){ menuOpen = !menuOpen; try { navigator.vibrate(10); } catch (e) {} };
+    $('xhome').onclick = function(){ gm = 'home'; sq++; st = 2; menuOpen = false; };
+    setInterval(function(){ var idle = phase === 'lobby' || phase === 'end'; var show = idle || menuOpen ? 'block' : 'none'; $('xstarts').style.display = show; $('xhome').style.display = menuOpen && !idle ? 'block' : 'none'; $('xmenu').style.display = idle ? 'none' : 'block'; $('xmenu').textContent = menuOpen ? '✕ Fechar' : '🎮 Trocar jogo'; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
     send();
     setInterval(function(){ send(); }, 50);
     function mv(cx, cy){ var r = stick.getBoundingClientRect(), dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2), max = r.width / 2 - 20, d = Math.sqrt(dx * dx + dy * dy); if (d > max) { dx *= max / d; dy *= max / d; } knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; x = dx / max; y = dy / max; }
@@ -116,7 +120,8 @@ var GAME = (function(){
     p.ix = clamp(+d.x || 0, -1, 1); p.iy = clamp(+d.y || 0, -1, 1);
     var a = !!d.a; if (a && !p.a) p.press = true; p.a = a;
     var j = !!d.j; if (j && !p.j) p.jump = true; p.j = j;
-    if (d.st && (phase === 'lobby' || phase === 'end')) startGame(d.gm === 'marshal' || d.gm === 'aves' ? d.gm : 'sumiu');
+    // a game can be chosen at any time (restarts with fresh scores); 'home' goes back to the lobby
+    if (d.st && d.sq && d.sq !== p.lastSq) { p.lastSq = d.sq; if (d.gm === 'home') toLobby(); else startGame(d.gm === 'marshal' || d.gm === 'aves' ? d.gm : 'sumiu'); }
     if (d.lv) { removePlayer(p); return; }
     if (d.t) pongs[d.id] = d.t;
   }
@@ -236,7 +241,14 @@ var GAME = (function(){
   function heatOf(p){ if (phase !== 'round') return 0; var sp = targetPos(); if (!sp) return 0; var d = Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z)); return clamp(1 - d / 12, 0, 1); }
 
   /* ---------------- game flow ---------------- */
+  function toLobby(){
+    restoreItem(); clearDog(); clearBirds(); cur = null; round = 0; phase = 'lobby'; foundBy = null;
+    slots.forEach(function(p){ if (p) { p.score = 0; p.msgT = 0; } });
+    if (explore) AUDIO.clear();
+    dirty = true; drawTvScreen();
+  }
   function startGame(gm){
+    restoreItem(); clearDog(); clearBirds(); cur = null;
     mode = gm; round = 0; used = []; slots.forEach(function(p){ if (p) p.score = 0; });
     // nobody can play as Marshal while Marshal is the one hiding
     if (mode === 'marshal') slots.forEach(function(p){ if (p && p.ch === 'marshal') { var free = CHARS.list.filter(function(c){ return c !== 'marshal' && !chTaken(c); })[0]; if (free) setChar(p, free); } });
@@ -418,7 +430,7 @@ var GAME = (function(){
   }
 
   function restoreItem(){
-    if (!cur) return;
+    if (!cur || !cur.item) return;
     var it = house.items[cur.item], h = it.home; it.obj.visible = true; it.obj.position.set(h.x, h.y, h.z); it.obj.rotation.set(0, h.ry, 0);
   }
   function spotById(id){ for (var i = 0; i < house.spots.length; i++) if (house.spots[i].id === id) return house.spots[i]; }
