@@ -1,11 +1,12 @@
 /* TV side: renders the house in split screen and runs the treasure hunt. */
 var GAME = (function(){
-  var ROUNDS = 5, HINT_EVERY = 25, SEARCH_R = 1.35;
+  var ROUNDS = 5, HINT_EVERY = 20, ROUND_TIME = 60, SEARCH_R = 1.35, CATCH_R = 1.25;
   var renderer, scene, house, mq = null, code = '';
   var slots = [null, null, null];
   var phase = 'lobby', round = 0, used = [], cur = null, roundT = 0, phaseT = 0, foundBy = null;
   var hud = {}, scale = /hq/.test(location.search) ? 1 : 0.75, fps = 60, fpsFrames = 0, fpsT = 0, lowT = 0;
   var sparkle, pongs = {}, dirty = true, lastPub = 0;
+  var mode = 'sumiu', npc = null, poos = [], pooGeo = null, pooMat = null, grid = null, barkN = 0, timedOut = false, roundsPlayed = 0;
 
   function $(id){ return document.getElementById(id); }
   function el(tag, cls, parent){ var e = document.createElement(tag); if (cls) e.className = cls; (parent || document.body).appendChild(e); return e; }
@@ -51,13 +52,15 @@ var GAME = (function(){
   function startExplore(){
     var chIdx = 0, x = 0, y = 0, sid = null, stick = $('xstick'), knob = $('xknob'), aDown = false, st = 0;
     $('explore').style.display = 'block';
-    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown }; if (st > 0) { m.st = 1; st--; } onMsg('l', JSON.stringify(m)); }
+    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown }; if (st > 0) { m.st = 1; m.gm = gm; st--; } onMsg('l', JSON.stringify(m)); }
     var xa = $('xA');
     xa.addEventListener('touchstart', function(e){ e.preventDefault(); aDown = true; xa.classList.add('down'); try { navigator.vibrate(22); } catch (err) {} }, { passive: false });
     xa.addEventListener('touchend', function(){ aDown = false; xa.classList.remove('down'); });
     xa.addEventListener('mousedown', function(){ aDown = true; }); xa.addEventListener('mouseup', function(){ aDown = false; });
-    $('xstart').onclick = function(){ st = 2; try { navigator.vibrate(12); } catch (e) {} };
-    setInterval(function(){ $('xstart').style.display = (phase === 'lobby' || phase === 'end') ? 'block' : 'none'; $('xstart').textContent = phase === 'end' ? '▶ Jogar de novo' : '▶ Começar o jogo'; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
+    var gm = 'sumiu';
+    $('xstart1').onclick = function(){ gm = 'sumiu'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    $('xstart2').onclick = function(){ gm = 'marshal'; st = 2; AUDIO.init(); try { navigator.vibrate(12); } catch (e) {} };
+    setInterval(function(){ var show = (phase === 'lobby' || phase === 'end') ? 'block' : 'none'; $('xstarts').style.display = show; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
     send();
     setInterval(function(){ send(); }, 50);
     function mv(cx, cy){ var r = stick.getBoundingClientRect(), dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2), max = r.width / 2 - 20, d = Math.sqrt(dx * dx + dy * dy); if (d > max) { dx *= max / d; dy *= max / d; } knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; x = dx / max; y = dy / max; }
@@ -65,8 +68,8 @@ var GAME = (function(){
     var zone = 0;
     setInterval(function(){ var z = Math.min(3, Math.floor(Math.sqrt(x * x + y * y) * 3.2)); if (z !== zone) { if (z > zone) { try { navigator.vibrate(z === 3 ? 18 : 8); } catch (e) {} } zone = z; } }, 30);
     var sniffT = 0;
-    setInterval(function(){ var p = slots[0]; if (!p || p.ch !== 'marshal') return; var h = heatOf(p); if (h < 0.55) return; sniffT -= 0.1; if (sniffT <= 0) { try { navigator.vibrate(h > 0.8 ? 35 : 15); } catch (e) {} sniffT = h > 0.8 ? 0.35 : 0.9; } }, 100);
-    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); try { navigator.vibrate(10); } catch (err) {} }, { passive: false });
+    setInterval(function(){ var p = slots[0]; if (!p || p.ch !== 'marshal' || mode !== 'sumiu') return; var h = heatOf(p); if (h < 0.55) return; sniffT -= 0.1; if (sniffT <= 0) { try { navigator.vibrate(h > 0.8 ? 35 : 15); } catch (e) {} sniffT = h > 0.8 ? 0.35 : 0.9; } }, 100);
+    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); AUDIO.init(); try { navigator.vibrate(10); } catch (err) {} }, { passive: false });
     stick.addEventListener('touchmove', function(e){ e.preventDefault(); for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) mv(e.changedTouches[i].clientX, e.changedTouches[i].clientY); }, { passive: false });
     stick.addEventListener('touchend', rel); stick.addEventListener('touchcancel', rel);
     var down = false;
@@ -74,7 +77,7 @@ var GAME = (function(){
     addEventListener('mousemove', function(e){ if (down) mv(e.clientX, e.clientY); });
     addEventListener('mouseup', function(){ if (down) { down = false; rel(); } });
     $('xchar').onclick = function(){
-      try { navigator.vibrate(12); } catch (e) {}
+      try { navigator.vibrate(12); } catch (e) {} AUDIO.init();
       var p = slots[0]; chIdx = (chIdx + 1) % CHARS.list.length;
       if (p) { setChar(p, CHARS.list[chIdx]); p.camInit = false; }
       $('xchar').textContent = '👤 ' + CHARS.info[CHARS.list[chIdx]].name;
@@ -105,21 +108,25 @@ var GAME = (function(){
     p.seen = performance.now();
     p.ix = clamp(+d.x || 0, -1, 1); p.iy = clamp(+d.y || 0, -1, 1);
     var a = !!d.a; if (a && !p.a) p.press = true; p.a = a;
-    if (d.st && (phase === 'lobby' || phase === 'end')) startGame();
+    if (d.st && (phase === 'lobby' || phase === 'end')) startGame(d.gm === 'marshal' ? 'marshal' : 'sumiu');
     if (d.lv) { removePlayer(p); return; }
     if (d.t) pongs[d.id] = d.t;
   }
   function chTaken(ch){ for (var i = 0; i < 3; i++) if (slots[i] && slots[i].ch === ch) return true; return false; }
   function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+  function r2(v){ return Math.round(v * 100) / 100; }
 
   function publish(now){
     if (!mq || !code) return;
-    if (!dirty && now - lastPub < 250) return;
+    var fast = mode === 'marshal' && phase === 'round';
+    if (!dirty && now - lastPub < (fast ? 120 : 250)) return;
     lastPub = now; dirty = false;
-    var st = { ph: phase, r: round, R: ROUNDS, pl: [], hints: [], pg: pongs };
+    var st = { ph: phase, gm: mode, r: round, R: ROUNDS, pl: [], hints: [], pg: pongs, tl: phase === 'round' ? Math.max(0, Math.ceil(ROUND_TIME - roundT)) : 0 };
     pongs = {};
-    slots.forEach(function(p){ if (p) st.pl.push({ id: p.id, ch: p.ch, sc: p.score, near: p.nearSpot ? p.nearSpot.name : '', msg: p.msgT > 0 ? p.msg : '', bp: p.bump || 0, ht: p.ch === 'marshal' ? Math.round(heatOf(p) * 100) / 100 : 0 }); });
-    if (cur && phase !== 'lobby') { st.obj = house.items[cur.item].name; st.hints = cur.hints.slice(0, hintCount()); }
+    slots.forEach(function(p){ if (p) st.pl.push({ id: p.id, ch: p.ch, sc: p.score, near: p.nearSpot ? p.nearSpot.name : '', msg: p.msgT > 0 ? p.msg : '', bp: p.bump || 0, ht: p.ch === 'marshal' && mode === 'sumiu' ? Math.round(heatOf(p) * 100) / 100 : 0,
+      nd: p.nearDog ? 1 : 0, px: r2(p.x), pz: r2(p.z), pa: r2(p.ang), oc: npc && mode === 'marshal' ? (occluded(p.x, p.z, npc.x, npc.z) ? 1 : 0) : 0 }); });
+    if (npc && mode === 'marshal') { st.mx = r2(npc.x); st.mz = r2(npc.z); st.bk = barkN; }
+    if (phase !== 'lobby' && phase !== 'end') { st.obj = title(); st.hints = hintsNow(); }
     if (phase === 'found' && foundBy) st.found = foundBy;
     if (phase === 'end') st.win = winnerText();
     mq.pub('casarefugio/' + code + '/tv', JSON.stringify(st));
@@ -166,14 +173,16 @@ var GAME = (function(){
     p.speedNow = Math.abs(sp) / p.info.speed;
     var m = p.model.root; m.position.set(p.x, 0, p.z); m.rotation.y = -p.ang + Math.PI / 2;
     p.model.animate(dt, p.speedNow + (p.searchT > 0 ? 0.6 : 0));
-    // nearest search spot
+    // nearest search spot (game 1) / Marshal in reach (game 2)
     p.nearSpot = null; var best = SEARCH_R;
-    house.spots.forEach(function(s){ var d = Math.sqrt((s.x - p.x) * (s.x - p.x) + (s.z - p.z) * (s.z - p.z)); if (d < best) { best = d; p.nearSpot = s; } });
+    p.nearDog = mode === 'marshal' && npc && phase === 'round' && Math.sqrt((npc.x - p.x) * (npc.x - p.x) + (npc.z - p.z) * (npc.z - p.z)) < CATCH_R;
+    if (mode === 'sumiu') house.spots.forEach(function(s){ var d = Math.sqrt((s.x - p.x) * (s.x - p.x) + (s.z - p.z) * (s.z - p.z)); if (d < best) { best = d; p.nearSpot = s; } });
     if (p.msgT > 0) { p.msgT -= dt; if (p.msgT <= 0) dirty = true; }
     // search
     if (p.press) {
       p.press = false;
-      if (phase === 'round' && p.nearSpot && p.searchT <= 0) { p.searchT = 0.9; p.searching = p.nearSpot; say(p, 'Procurando ' + p.nearSpot.name + '...', 1); }
+      if (p.nearDog) caught(p);
+      else if (phase === 'round' && mode === 'sumiu' && p.nearSpot && p.searchT <= 0) { p.searchT = 0.9; p.searching = p.nearSpot; say(p, 'Procurando ' + p.nearSpot.name + '...', 1); }
     }
     if (p.searchT > 0) {
       p.searchT -= dt;
@@ -197,25 +206,41 @@ var GAME = (function(){
   }
   function say(p, text, sec){ p.msg = text; p.msgT = sec; dirty = true; }
   function buzz(p, pat){ if (explore && p.id === 'me') { try { navigator.vibrate(pat); } catch (e) {} } }
-  function heatOf(p){ if (!cur || phase !== 'round') return 0; var sp = spotById(cur.spot), d = Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z)); return clamp(1 - d / 12, 0, 1); }
+  function heatOf(p){ if (phase !== 'round') return 0; var sp = targetPos(); if (!sp) return 0; var d = Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z)); return clamp(1 - d / 12, 0, 1); }
 
   /* ---------------- game flow ---------------- */
-  function startGame(){
-    round = 0; used = []; slots.forEach(function(p){ if (p) p.score = 0; });
+  function startGame(gm){
+    mode = gm; round = 0; used = []; slots.forEach(function(p){ if (p) p.score = 0; });
+    // nobody can play as Marshal while Marshal is the one hiding
+    if (mode === 'marshal') slots.forEach(function(p){ if (p && p.ch === 'marshal') { var free = CHARS.list.filter(function(c){ return c !== 'marshal' && !chTaken(c); })[0]; if (free) setChar(p, free); } });
     nextRound();
   }
   function nextRound(){
-    restoreItem();
+    restoreItem(); clearDog();
     if (round >= ROUNDS) { phase = 'end'; phaseT = 0; dirty = true; drawTvScreen(); return; }
-    round++;
-    var pool = CHALLENGES.filter(function(c, i){ return used.indexOf(i) < 0; });
-    if (!pool.length) { used = []; pool = CHALLENGES.slice(); }
-    cur = pool[(Math.random() * pool.length) | 0]; used.push(CHALLENGES.indexOf(cur));
-    house.items[cur.item].obj.visible = false;
-    phase = 'round'; roundT = 0; foundBy = null; dirty = true;
+    round++; roundT = 0; foundBy = null; timedOut = false;
+    if (mode === 'sumiu') {
+      var pool = CHALLENGES.filter(function(c, i){ return used.indexOf(i) < 0; });
+      if (!pool.length) { used = []; pool = CHALLENGES.slice(); }
+      cur = pool[(Math.random() * pool.length) | 0]; used.push(CHALLENGES.indexOf(cur));
+      house.items[cur.item].obj.visible = false;
+    } else spawnDog();
+    phase = 'round'; dirty = true;
     drawTvScreen();
   }
   function hintCount(){ return Math.min(3, 1 + Math.floor(roundT / HINT_EVERY)); }
+  function title(){ return mode === 'marshal' ? 'Cadê o Marshal?' : (cur ? 'Sumiu ' + house.items[cur.item].name + '!' : ''); }
+  function hintsNow(){
+    if (mode === 'sumiu') return cur ? cur.hints.slice(0, hintCount()) : [];
+    var h = ['🐾 Ele fica indo e vindo pela casa. Siga os cocôs e os latidos (com fone de ouvido, o som vem da direção certa)!'];
+    if (npc && hintCount() >= 2) h.push('🐶 Agora ele está ' + roomOf(npc.x, npc.z) + '.');
+    if (npc && hintCount() >= 3) h.push('👃 Bem pertinho ' + nearestSpotName(npc.x, npc.z) + '.');
+    return h;
+  }
+  function targetPos(){
+    if (mode === 'marshal') return npc ? { x: npc.x, z: npc.z } : null;
+    return cur ? spotById(cur.spot) : null;
+  }
   function found(p){
     p.score++; phase = 'found'; phaseT = 0;
     var it = house.items[cur.item], sp = spotById(cur.spot);
@@ -224,6 +249,135 @@ var GAME = (function(){
     slots.forEach(function(q){ if (q) { say(q, q === p ? 'Você achou! +1 ponto' : foundBy, 6); buzz(q, q === p ? [80, 60, 160] : [40]); } });
     dirty = true; drawTvScreen();
   }
+  function caught(p){
+    p.score++; phase = 'found'; phaseT = 0; npc.state = 'caught'; npc.wag = 0;
+    foundBy = p.info.name + ' achou o Marshal ' + roomOf(npc.x, npc.z) + '!';
+    slots.forEach(function(q){ if (q) { say(q, q === p ? 'Achou o Marshal! +1 ponto' : foundBy, 6); buzz(q, q === p ? [80, 60, 160] : [40]); } });
+    bark(); dirty = true; drawTvScreen();
+  }
+  function timeUp(){
+    phase = 'found'; phaseT = 0; timedOut = true;
+    if (mode === 'sumiu') {
+      var it = house.items[cur.item], sp = spotById(cur.spot);
+      it.obj.visible = true; it.obj.position.set(sp.x, 1.3, sp.z);
+      foundBy = 'Tempo esgotado! ' + it.name.charAt(0).toUpperCase() + it.name.slice(1) + ' estava ' + sp.name + '.';
+    } else {
+      foundBy = 'Tempo esgotado! O Marshal estava ' + roomOf(npc.x, npc.z) + '.'; npc.state = 'caught'; bark();
+    }
+    slots.forEach(function(q){ if (q) { say(q, foundBy, 5); buzz(q, [200]); } });
+    dirty = true; drawTvScreen();
+  }
+  function roomOf(x, z){
+    if (x < 3.2 && z < 3.8) return 'perto da banheira';
+    if (x < 3 && z > 6) return 'no banheiro';
+    if (x < 4.65 && z > 8.8) return 'na lavanderia';
+    if (x >= 4.6 && x < 10.7 && z > 6.75) return 'na cozinha';
+    if (x >= 10.7 && z > 6.3) return 'na sala de jantar';
+    if (x >= 8.6 && z <= 6.3) return 'na sala de TV';
+    if (z > 5.6 && x >= 4.6) return 'perto do bar';
+    return 'no hall de entrada';
+  }
+  function nearestSpotName(x, z){
+    var b = null, bd = 99; house.spots.forEach(function(s){ var d = (s.x - x) * (s.x - x) + (s.z - z) * (s.z - z); if (d < bd) { bd = d; b = s; } });
+    if (!b) return '';
+    return b.name.replace(/^(debaixo|perto) /, '').replace(/^no /, 'do ').replace(/^na /, 'da ').replace(/^nos /, 'dos ').replace(/^nas /, 'das ');
+  }
+
+  /* ---------------- Marshal (autonomous dog for game 2) ---------------- */
+  var HIDES = [[13.6, 8.9], [11.0, 5.05], [1.8, 8.6], [3.8, 9.7], [3.55, 2.7], [7.25, 0.55], [7.0, 6.1], [5.9, 9.7], [15.4, 1.0], [0.7, 5.8], [15.2, 6.7], [15.4, 10.5], [11.3, 10.4], [9.1, 2.0], [6.6, 3.5], [12.6, 1.4], [4.9, 6.2], [9.6, 5.3]];
+  var GS = 0.25, GX = 64, GZ = 44;
+  function buildGrid(){
+    grid = new Uint8Array(GX * GZ);
+    for (var j = 0; j < GZ; j++) for (var i = 0; i < GX; i++) grid[j * GX + i] = blocked((i + 0.5) * GS, (j + 0.5) * GS, 0.17, true) ? 0 : 1;
+    HIDES = HIDES.filter(function(h){ return grid[cellOf(h[0], h[1])]; });
+  }
+  function cellOf(x, z){ return clamp(Math.floor(z / GS), 0, GZ - 1) * GX + clamp(Math.floor(x / GS), 0, GX - 1); }
+  function findPath(x0, z0, x1, z1){
+    var s = cellOf(x0, z0), t = cellOf(x1, z1);
+    if (!grid[t]) return null;
+    var g = new Float32Array(GX * GZ).fill(1e9), from = new Int32Array(GX * GZ).fill(-1), closed = new Uint8Array(GX * GZ), open = [s];
+    g[s] = 0;
+    var tx = t % GX, tz = (t / GX) | 0;
+    function h(c){ var dx = Math.abs(c % GX - tx), dz = Math.abs(((c / GX) | 0) - tz); return Math.max(dx, dz) + 0.41 * Math.min(dx, dz); }
+    var it = 0;
+    while (open.length && it++ < 4000) {
+      var bi = 0, bf = 1e9; for (var k = 0; k < open.length; k++) { var f = g[open[k]] + h(open[k]); if (f < bf) { bf = f; bi = k; } }
+      var c = open[bi]; open.splice(bi, 1);
+      if (c === t) break;
+      closed[c] = 1;
+      var cx = c % GX, cz = (c / GX) | 0;
+      for (var dz = -1; dz <= 1; dz++) for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dz) continue;
+        var nx = cx + dx, nz = cz + dz; if (nx < 0 || nz < 0 || nx >= GX || nz >= GZ) continue;
+        var n = nz * GX + nx; if (!grid[n] || closed[n]) continue;
+        if (dx && dz && (!grid[cz * GX + nx] || !grid[nz * GX + cx])) continue;
+        var ng = g[c] + (dx && dz ? 1.41 : 1);
+        if (ng < g[n]) { g[n] = ng; from[n] = c; if (open.indexOf(n) < 0) open.push(n); }
+      }
+    }
+    if (from[t] < 0 && s !== t) return null;
+    var path = [], c2 = t; while (c2 !== s && c2 >= 0) { path.unshift([(c2 % GX + 0.5) * GS, (((c2 / GX) | 0) + 0.5) * GS]); c2 = from[c2]; }
+    path.push([x1, z1]);
+    return path;
+  }
+  function spawnDog(){
+    if (!grid) buildGrid();
+    var model = CHARS.make('marshal'); model.label.visible = false; scene.add(model.root);
+    var h = farHide(), ang = Math.random() * 6.28;
+    npc = { model: model, x: h[0], z: h[1], ang: ang, path: null, state: 'hide', t: 6 + Math.random() * 6, barkT: 3 + Math.random() * 3, pooT: 0.8, speed: 2.0, wag: 0 };
+  }
+  function clearDog(){
+    if (npc) { scene.remove(npc.model.root); npc = null; }
+    poos.forEach(function(m){ scene.remove(m); }); poos = [];
+  }
+  function minPlayerDist(x, z){ var m = 99; slots.forEach(function(p){ if (p) m = Math.min(m, Math.sqrt((p.x - x) * (p.x - x) + (p.z - z) * (p.z - z))); }); return m; }
+  function farHide(exclude){
+    var c = HIDES.filter(function(h){ return !exclude || Math.abs(h[0] - exclude[0]) + Math.abs(h[1] - exclude[1]) > 1; });
+    c.sort(function(a, b){ return minPlayerDist(b[0], b[1]) - minPlayerDist(a[0], a[1]); });
+    return c[Math.floor(Math.random() * Math.min(5, c.length))];
+  }
+  function goTo(h, speed){ var path = findPath(npc.x, npc.z, h[0], h[1]); if (path && path.length) { npc.path = path; npc.state = 'move'; npc.speed = speed; npc.dest = h; return true; } return false; }
+  function bark(){
+    barkN++; dirty = true;
+    if (explore && slots[0] && npc) { var p = slots[0]; AUDIO.play('bark', AUDIO.rel(p.x, p.z, p.ang, npc.x, npc.z, 0.4 - p.info.cam), occluded(p.x, p.z, npc.x, npc.z)); }
+  }
+  function occluded(x0, z0, x1, z1){
+    var d = Math.sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0)), n = Math.ceil(d / 0.25);
+    for (var i = 1; i < n; i++) { var t = i / n; if (wallAt(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t)) return true; }
+    return false;
+  }
+  function dropPoo(){
+    if (!pooGeo) {
+      var parts = [[0.07, 0.03], [0.055, 0.07], [0.038, 0.105]].map(function(q){ var g = new THREE.SphereGeometry(q[0], 10, 7); g.scale(1, 0.7, 1); g.translate(0, q[1], 0); return g; });
+      var tip = new THREE.ConeGeometry(0.02, 0.05, 8); tip.translate(0, 0.14, 0); parts.push(tip);
+      pooGeo = TEX.merge(parts); pooMat = new THREE.MeshLambertMaterial({ color: 0x6b4423 });
+    }
+    var m = new THREE.Mesh(pooGeo, pooMat); m.position.set(npc.x, 0, npc.z); m.rotation.y = Math.random() * 6; scene.add(m); poos.push(m);
+    if (poos.length > 14) scene.remove(poos.shift());
+  }
+  function updateDog(dt){
+    if (!npc) return;
+    var sp = 0;
+    if (npc.state === 'caught') { npc.wag += dt; npc.model.root.position.y = Math.abs(Math.sin(npc.wag * 8)) * 0.12; npc.model.animate(dt, 0.6); return; }
+    if (phase === 'round') {
+      npc.barkT -= dt; if (npc.barkT <= 0) { bark(); npc.barkT = 5 + Math.random() * 5; }
+      if (npc.state === 'hide') {
+        npc.t -= dt;
+        if (minPlayerDist(npc.x, npc.z) < 2.3 && Math.random() < dt * 1.6) { if (goTo(farHide([npc.x, npc.z]), 2.9)) bark(); }
+        else if (npc.t <= 0) { if (!goTo(farHide([npc.x, npc.z]), 1.9)) npc.t = 2; }
+      }
+      if (npc.state === 'move' && npc.path) {
+        var tgt = npc.path[0], dx = tgt[0] - npc.x, dz = tgt[1] - npc.z, d = Math.sqrt(dx * dx + dz * dz), step = npc.speed * dt;
+        if (d <= step) { npc.x = tgt[0]; npc.z = tgt[1]; npc.path.shift(); if (!npc.path.length) { npc.state = 'hide'; npc.t = 7 + Math.random() * 7; } }
+        else { npc.x += dx / d * step; npc.z += dz / d * step; var want = Math.atan2(dz, dx), da = want - npc.ang; while (da > Math.PI) da -= 6.283; while (da < -Math.PI) da += 6.283; npc.ang += da * Math.min(1, dt * 10); }
+        sp = npc.speed / 2.2;
+        npc.pooT -= dt; if (npc.pooT <= 0) { dropPoo(); npc.pooT = 2.0 + Math.random() * 1.2; }
+      }
+    }
+    var r = npc.model.root; r.position.set(npc.x, 0, npc.z); r.rotation.y = -npc.ang + Math.PI / 2;
+    npc.model.animate(dt, sp);
+  }
+
   function restoreItem(){
     if (!cur) return;
     var it = house.items[cur.item], h = it.home; it.obj.visible = true; it.obj.position.set(h.x, h.y, h.z); it.obj.rotation.set(0, h.ry, 0);
@@ -243,7 +397,7 @@ var GAME = (function(){
     hud.lobby.innerHTML = '<div class="title">Casa Refúgio <span>caça ao tesouro</span></div>' +
       '<div class="step">1. No celular, abra <b>pinheiroproducaomusical-netizen.github.io/casa-refugio</b></div>' +
       '<div class="step">2. Toque em <b>Sou um controle</b> e digite o código:</div>' +
-      '<div class="bigcode" id="hcode">----</div><div class="step">3. Escolha seu personagem. Quando todos entrarem, toque em <b>Começar</b>.</div><div class="lmsg" id="lmsg"></div>';
+      '<div class="bigcode" id="hcode">----</div><div class="step">3. Escolha seu personagem. Quando todos entrarem, escolha o jogo no celular: <b>🔎 Sumiu!</b> ou <b>🐶 Cadê o Marshal?</b></div><div class="lmsg" id="lmsg"></div>';
     hud.code = $('hcode'); hud.lobbyMsg = $('lmsg');
     hud.panel = el('div', 'panel game', h);
     hud.views = [0, 1, 2].map(function(){ var v = el('div', 'view', h); v.innerHTML = '<div class="vname"></div><div class="vmsg"></div><div class="vprompt"></div><div class="sniff"><div class="sbar"></div><span></span></div>'; return v; });
@@ -271,13 +425,14 @@ var GAME = (function(){
     } else {
       var html = '';
       if (phase === 'round' || phase === 'found') {
-        html += '<div class="round">Rodada ' + round + ' de ' + ROUNDS + '</div>';
-        html += '<div class="missing">Sumiu ' + house.items[cur.item].name + '!</div>';
-        html += cur.hints.slice(0, hintCount()).map(function(t){ return '<div class="hint">' + t + '</div>'; }).join('');
+        var tl = Math.max(0, Math.ceil(ROUND_TIME - roundT));
+        html += '<div class="round">Rodada ' + round + ' de ' + ROUNDS + (phase === 'round' ? ' · <span class="timer' + (tl <= 10 ? ' hot' : '') + '">⏱ 0:' + (tl < 10 ? '0' : '') + tl + '</span>' : '') + '</div>';
+        html += '<div class="missing">' + title() + '</div>';
+        html += hintsNow().map(function(t){ return '<div class="hint">' + t + '</div>'; }).join('');
         if (phase === 'round' && hintCount() < 3) html += '<div class="next">próxima dica em ' + Math.ceil(HINT_EVERY - roundT % HINT_EVERY) + ' s</div>';
-        if (phase === 'found') html += '<div class="foundmsg">' + foundBy + '</div>';
+        if (phase === 'found') html += '<div class="foundmsg' + (timedOut ? ' late' : '') + '">' + foundBy + '</div>';
       } else if (phase === 'end') {
-        html += '<div class="missing">Fim de jogo!</div><div class="foundmsg">' + winnerText() + '</div><div class="next">Toque em <b>Jogar de novo</b> no celular.</div>';
+        html += '<div class="missing">Fim de jogo!</div><div class="foundmsg">' + winnerText() + '</div><div class="next">Escolha um jogo no celular para jogar de novo.</div>';
       }
       html += '<div class="scores">' + active.map(function(p){ return '<span style="color:' + p.info.color + '">' + p.info.name + ' ' + p.score + '</span>'; }).join(' · ') + '</div>';
       if (hud.panel._h !== html) { hud.panel.innerHTML = html; hud.panel._h = html; }
@@ -288,12 +443,11 @@ var GAME = (function(){
       v.style.display = 'block'; place(v, L.views[i]);
       v.children[0].textContent = p.info.name + ' · ' + p.score; v.children[0].style.background = p.info.color;
       v.children[1].textContent = p.msgT > 0 ? p.msg : ''; v.children[1].style.display = p.msgT > 0 ? 'block' : 'none';
-      var pr2 = (phase === 'round' && p.nearSpot && p.searchT <= 0) ? 'Aperte A: procurar ' + p.nearSpot.name : '';
+      var pr2 = p.nearDog ? 'Aperte A: pegar o Marshal!' : (phase === 'round' && mode === 'sumiu' && p.nearSpot && p.searchT <= 0) ? 'Aperte A: procurar ' + p.nearSpot.name : '';
       v.children[2].textContent = pr2; v.children[2].style.display = pr2 ? 'block' : 'none';
       var sn = v.children[3];
-      if (p.ch === 'marshal' && phase === 'round') {
-        var sp = spotById(cur.spot), d = Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z));
-        var heat = clamp(1 - d / 12, 0, 1);
+      if (p.ch === 'marshal' && phase === 'round' && mode === 'sumiu') {
+        var heat = heatOf(p);
         sn.style.display = 'block'; sn.children[0].style.width = (heat * 100) + '%';
         sn.children[0].style.background = heat > 0.8 ? '#e63946' : heat > 0.55 ? '#f4a261' : '#4ea8de';
         sn.children[1].textContent = '👃 ' + (heat > 0.8 ? 'QUENTE!' : heat > 0.55 ? 'morno' : 'frio');
@@ -307,7 +461,7 @@ var GAME = (function(){
     g.fillStyle = gr; g.fillRect(0, 0, 512, 288);
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 46px sans-serif'; g.fillText('Casa Refúgio', 256, 90);
     g.font = '28px sans-serif';
-    var line = phase === 'lobby' ? (code ? 'código ' + code : 'conectando...') : phase === 'end' ? winnerText() : (cur ? 'Sumiu ' + house.items[cur.item].name + '!' : '');
+    var line = phase === 'lobby' ? (code ? 'código ' + code : 'conectando...') : phase === 'end' ? winnerText() : title();
     g.fillText(line, 256, 170);
     g.font = '20px sans-serif'; g.fillStyle = '#ffd166'; g.fillText('caça ao tesouro', 256, 230);
     house.tvTex.needsUpdate = true;
@@ -323,8 +477,14 @@ var GAME = (function(){
       if (fps < 28 && scale > 0.5 && !/hq/.test(location.search)) { lowT++; if (lowT >= 3) { scale = Math.max(0.5, scale - 0.1); resize(); lowT = 0; } } else lowT = 0; }
     // drop players that went silent
     slots.forEach(function(p){ if (p && now - p.seen > 20000) removePlayer(p); });
-    if (phase === 'round') { var hc = hintCount(); roundT += dt; if (hintCount() !== hc) { dirty = true; slots.forEach(function(q){ if (q) buzz(q, [40, 40, 40]); }); } }
-    if (phase === 'found') { phaseT += dt; var it = house.items[cur.item].obj; it.rotation.y += dt * 2; if (phaseT > 6) nextRound(); }
+    if (phase === 'round') {
+      var hc = hintCount(), secs = Math.ceil(ROUND_TIME - roundT); roundT += dt;
+      if (hintCount() !== hc) { dirty = true; slots.forEach(function(q){ if (q) buzz(q, [40, 40, 40]); }); }
+      if (Math.ceil(ROUND_TIME - roundT) !== secs) dirty = true;
+      if (roundT >= ROUND_TIME) timeUp();
+    }
+    if (phase === 'found') { phaseT += dt; if (mode === 'sumiu') { var it = house.items[cur.item].obj; it.rotation.y += dt * 2; } if (phaseT > 6) nextRound(); }
+    updateDog(dt);
     var active = slots.filter(Boolean);
     active.forEach(function(p){ updatePlayer(p, dt); });
     publish(now);
@@ -349,11 +509,11 @@ var GAME = (function(){
     slots.forEach(function(q){ if (q) q.model.label.visible = q !== p; });
     sparkle.visible = false;
     if (p && p.ch === 'aria' && phase === 'round') {
-      var sp = spotById(cur.spot), d = Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z));
-      if (d < 3) { sparkle.visible = true; sparkle.position.set(sp.x, 1.0 + Math.sin(performance.now() / 200) * 0.1, sp.z); }
+      var sp = targetPos(), d = sp ? Math.sqrt((sp.x - p.x) * (sp.x - p.x) + (sp.z - p.z) * (sp.z - p.z)) : 99;
+      if (d < 3) { sparkle.visible = true; sparkle.position.set(sp.x, (mode === 'marshal' ? 0.9 : 1.0) + Math.sin(performance.now() / 200) * 0.1, sp.z); }
     }
     renderer.render(scene, cam);
   }
 
-  return { start: start, _msg: onMsg, _slots: function(){ return slots; }, _phase: function(){ return phase; }, _cur: function(){ return cur; }, _house: function(){ return house; }, _info: function(){ return renderer.info; } };
+  return { start: start, _msg: onMsg, _slots: function(){ return slots; }, _phase: function(){ return phase; }, _cur: function(){ return cur; }, _house: function(){ return house; }, _info: function(){ return renderer.info; }, _npc: function(){ return npc; }, _poos: function(){ return poos; } };
 })();

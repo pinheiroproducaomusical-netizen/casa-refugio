@@ -29,6 +29,8 @@
   .missing{font-size:4.4vh;font-weight:bold;color:#ffd166;margin:.6vh 0 1.4vh}
   .hint{font-size:2.6vh;line-height:1.35;margin:1vh 0;padding:1vh 1vw;background:rgba(255,255,255,.08);border-radius:1vh}
   .next{font-size:2vh;opacity:.6;margin-top:1vh}
+  .timer{font-weight:bold;color:#fff}.timer.hot{color:#ff6b6b}
+  .foundmsg.late{color:#ffb347}
   .foundmsg{font-size:3.6vh;font-weight:bold;color:#7ee081;margin-top:1.4vh}
   .scores{position:absolute;bottom:1.6vh;left:2vw;right:2vw;font-size:3vh;font-weight:bold}
   .view{position:absolute;background:radial-gradient(ellipse at center, rgba(0,0,0,0) 58%, rgba(0,0,0,.32) 100%)}
@@ -44,7 +46,9 @@
   #xstick{position:absolute;left:24px;bottom:24px;width:170px;height:170px;border-radius:50%;background:rgba(20,24,32,.45);border:3px solid rgba(255,255,255,.35);pointer-events:auto;touch-action:none}
   #xknob{position:absolute;left:47px;top:47px;width:70px;height:70px;border-radius:50%;background:rgba(91,140,255,.85);pointer-events:none}
   #xchar{position:absolute;right:14px;top:14px;pointer-events:auto;font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:rgba(20,24,32,.7);color:#fff}
-  #xstart{position:absolute;left:14px;top:14px;pointer-events:auto;font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:#2fbf71;color:#fff;font-weight:bold}
+  #xstarts{position:absolute;left:14px;top:14px;pointer-events:auto}
+  #xstarts button{display:block;margin-bottom:8px;font-size:16px;padding:10px 14px;border-radius:12px;border:0;color:#fff;font-weight:bold;background:#2fbf71}
+  #xstart2{background:#e0883d !important}
   #xA{position:absolute;right:28px;bottom:40px;width:96px;height:96px;border-radius:50%;border:0;background:rgba(224,83,61,.9);color:#fff;font-size:32px;font-weight:bold;pointer-events:auto;touch-action:none}
   #xA.down{filter:brightness(1.5)}
   .panel.solo{padding:10px 12px}
@@ -72,7 +76,8 @@
   #info .found{font-size:18px;color:#7ee081;font-weight:bold;margin-top:8px}
   #meMsg{text-align:center;min-height:22px;font-size:16px;color:#ffd166;padding:0 10px}
   #lobbyBtns{justify-content:center;padding:6px}
-  #lobbyBtns button{font-size:18px;padding:12px 18px;border-radius:12px;border:0;margin:0 6px;color:#fff}
+  #lobbyBtns{flex-wrap:wrap}
+  #lobbyBtns button{font-size:17px;padding:12px 14px;margin-bottom:6px;border-radius:12px;border:0;margin:0 6px;color:#fff}
   #controls{display:flex;align-items:center;justify-content:space-around;padding:10px 0 26px;touch-action:none}
   #stick{width:210px;height:210px;border-radius:50%;background:#222833;border:3px solid #3a4252;position:relative;touch-action:none}
   #knob{width:86px;height:86px;border-radius:50%;background:#5b8cff;position:absolute;left:59px;top:59px;pointer-events:none}
@@ -98,7 +103,7 @@
 <div id="explore" style="display:none">
   <div id="xstick"><div id="xknob"></div></div>
   <button id="xchar"></button>
-  <button id="xstart">▶ Começar o jogo</button>
+  <div id="xstarts"><button id="xstart1">🔎 Sumiu!</button><button id="xstart2">🐶 Cadê o Marshal?</button></div>
   <button id="xA">A</button>
 </div>
 
@@ -117,7 +122,8 @@
     <div id="info"></div>
     <div id="meMsg"></div>
     <div id="lobbyBtns" style="display:none">
-      <button id="startBtn" style="background:#2fbf71">Começar</button>
+      <button id="startBtn" style="background:#2fbf71">🔎 Sumiu!</button>
+      <button id="startBtn2" style="background:#e0883d">🐶 Cadê o Marshal?</button>
       <button id="swapBtn" style="background:#555">Trocar personagem</button>
     </div>
     <div id="controls">
@@ -128,13 +134,14 @@
 </div>
 
 <script src="lib/three.min.js"></script>
-<script src="js/net.js?v=8"></script>
-<script src="js/tex.js?v=8"></script>
-<script src="js/chars.js?v=8"></script>
-<script src="js/data.js?v=8"></script>
-<script src="js/house.js?v=8"></script>
-<script src="js/game.js?v=8"></script>
-<script src="js/pad.js?v=8"></script>
+<script src="js/net.js?v=9"></script>
+<script src="js/tex.js?v=9"></script>
+<script src="js/chars.js?v=9"></script>
+<script src="js/data.js?v=9"></script>
+<script src="js/house.js?v=9"></script>
+<script src="js/game.js?v=9"></script>
+<script src="js/audio.js?v=9"></script>
+<script src="js/pad.js?v=9"></script>
 <script>
   var started = false;
   function go(mode){

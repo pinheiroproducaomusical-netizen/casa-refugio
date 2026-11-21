@@ -1,7 +1,7 @@
 /* Phone controller */
 var PAD = (function(){
   function $(id){ return document.getElementById(id); }
-  var myId, code, mq = null, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
+  var myId, code, mq = null, gmSel = 'sumiu', lastBk = -1, zone = 0, lastBp = -1, lastHints = 0, sniffT = 0, lastHt = 0, ch = null, x = 0, y = 0, a = false, startN = 0, leaveN = 0, state = null, rtt = 0, lastSc = -1;
   try { myId = localStorage.getItem('crId'); } catch (e) {}
   if (!myId) { myId = 'p' + Math.random().toString(36).slice(2, 9); try { localStorage.setItem('crId', myId); } catch (e) {} }
 
@@ -19,6 +19,7 @@ var PAD = (function(){
   }
 
   function join(){
+    AUDIO.init();
     code = $('codeIn').value.replace(/\D/g, '');
     if (code.length !== 4 || code[0] < '1' || code[0] > '3') { status('Código inválido — são 4 números, aparecem na TV.'); return; }
     try { localStorage.setItem('crCode', code); } catch (e) {}
@@ -66,7 +67,8 @@ var PAD = (function(){
     A.addEventListener('touchstart', function(e){ e.preventDefault(); a = true; A.classList.add('down'); buzz(22); }, { passive: false });
     function up(){ a = false; A.classList.remove('down'); }
     A.addEventListener('touchend', up); A.addEventListener('touchcancel', up);
-    $('startBtn').onclick = function(){ startN = 4; buzz(12); };
+    $('startBtn').onclick = function(){ gmSel = 'sumiu'; startN = 4; buzz(12); AUDIO.init(); };
+    $('startBtn2').onclick = function(){ gmSel = 'marshal'; startN = 4; buzz(12); AUDIO.init(); };
     $('swapBtn').onclick = function(){ leaveN = 3; setTimeout(function(){ ch = null; show('choose'); }, 200); };
   }
 
@@ -74,7 +76,7 @@ var PAD = (function(){
     if (!mq) return;
     var msg = { id: myId, x: +x.toFixed(2), y: +y.toFixed(2), a: a };
     if (ch && leaveN <= 0) msg.ch = ch;
-    if (startN > 0) { msg.st = 1; startN--; }
+    if (startN > 0) { msg.st = 1; msg.gm = gmSel; startN--; }
     if (leaveN > 0) { msg.lv = 1; leaveN--; }
     if (Math.random() < 0.1) msg.t = performance.now();
     if (!ch && leaveN <= 0) return;
@@ -91,26 +93,33 @@ var PAD = (function(){
     var info = ch ? CHARS.info[ch] : null;
     $('meName').textContent = info ? info.name : ''; $('meName').style.background = info ? info.color : '#444';
     $('meScore').textContent = me ? me.sc + ' pts' : (ch ? 'entrando...' : '');
+    if (me && me.nd && !render._nd) buzz([15, 30, 15]); render._nd = me && me.nd;
     if (me && me.sc > lastSc && lastSc >= 0) { try { navigator.vibrate([80, 60, 160]); } catch (e) {} }
     if (me) lastSc = me.sc;
+    if (me && me.ch !== ch && CHARS.info[me.ch]) { ch = me.ch; try { localStorage.setItem('crCh', ch); } catch (e) {} }
+    if (state.gm === 'marshal' && typeof state.bk === 'number') {
+      if (lastBk >= 0 && state.bk > lastBk && me && typeof state.mx === 'number') AUDIO.play('bark', AUDIO.rel(me.px, me.pz, me.pa, state.mx, state.mz, -0.8), !!me.oc);
+      lastBk = state.bk;
+    } else lastBk = -1;
     if (me) { if (lastBp >= 0 && me.bp > lastBp) buzz(25); lastBp = me.bp; lastHt = me.ht || 0;
       if (me.msg && me.msg.indexOf('Nada') === 0 && render._lastMsg !== me.msg) buzz([30, 50, 30]); render._lastMsg = me.msg; }
     var nh = (state.hints || []).length; if (state.ph === 'round' && nh > lastHints) buzz([40, 40, 40]); lastHints = state.ph === 'round' ? nh : 0;
     if (ch && !me && taken[ch]) { ch = null; show('choose'); status('Esse personagem já foi escolhido.'); return; }
     var lobby = state.ph === 'lobby', end = state.ph === 'end';
     $('lobbyBtns').style.display = (lobby || end) ? 'flex' : 'none';
-    $('startBtn').textContent = end ? 'Jogar de novo' : 'Começar';
+    $('startBtn').textContent = '🔎 Sumiu!'; $('startBtn2').textContent = '🐶 Cadê o Marshal?';
     $('swapBtn').style.display = lobby ? 'block' : 'none';
+    $('startBtn2').style.display = 'block';
     var h = '';
-    if (lobby) h = '<div class="ph">Esperando todo mundo entrar...</div><div class="sub">Ande pela casa! Quando todos estiverem prontos, toque em Começar.</div>';
-    else if (end) h = '<div class="ph">Fim de jogo!</div><div class="sub">' + (state.win || '') + '</div>';
+    if (lobby) h = '<div class="ph">Esperando todo mundo entrar...</div><div class="sub">Ande pela casa! Quando todos estiverem prontos, escolha o jogo aqui embaixo. No "Cadê o Marshal?", use fone de ouvido para ouvir de onde vêm os latidos.</div>';
+    else if (end) h = '<div class="ph">Fim de jogo!</div><div class="sub">' + (state.win || '') + '</div><div class="sub">Escolha um jogo para jogar de novo.</div>';
     else {
-      h = '<div class="sub">Rodada ' + state.r + ' de ' + state.R + '</div><div class="ph">Sumiu ' + (state.obj || '') + '!</div>';
+      h = '<div class="sub">Rodada ' + state.r + ' de ' + state.R + (state.ph === 'round' ? ' · ⏱ ' + state.tl + ' s' : '') + '</div><div class="ph">' + (state.obj || '') + '</div>';
       h += (state.hints || []).map(function(t){ return '<div class="hint">' + t + '</div>'; }).join('');
       if (state.found) h += '<div class="found">' + state.found + '</div>';
     }
     if ($('info')._h !== h) { $('info').innerHTML = h; $('info')._h = h; }
-    $('aLabel').textContent = me && me.near && state.ph === 'round' ? 'procurar ' + me.near : '';
+    $('aLabel').textContent = me && me.nd ? 'pegar o Marshal!' : (me && me.near && state.ph === 'round' ? 'procurar ' + me.near : '');
     $('meMsg').textContent = me && me.msg ? me.msg : '';
     status(rtt ? 'atraso ' + rtt + ' ms' : '');
   }
