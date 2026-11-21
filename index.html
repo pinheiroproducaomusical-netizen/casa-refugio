@@ -40,6 +40,10 @@
   .sniff span{position:absolute;left:0;right:0;top:.6vh;text-align:center;font-size:2.4vh;font-weight:bold}
   .smallcode{position:absolute;right:1vw;bottom:.5vh;font-size:1.8vh;opacity:.6}
   .fps{position:absolute;left:1vw;bottom:.5vh;font-size:1.6vh;opacity:.4}
+  #explore{position:fixed;left:0;right:0;bottom:0;top:0;pointer-events:none;z-index:10}
+  #xstick{position:absolute;left:24px;bottom:24px;width:170px;height:170px;border-radius:50%;background:rgba(20,24,32,.45);border:3px solid rgba(255,255,255,.35);pointer-events:auto;touch-action:none}
+  #xknob{position:absolute;left:47px;top:47px;width:70px;height:70px;border-radius:50%;background:rgba(91,140,255,.85);pointer-events:none}
+  #xchar{position:absolute;right:14px;top:14px;pointer-events:auto;font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:rgba(20,24,32,.7);color:#fff}
   /* ---------- PAD ---------- */
   #pad{position:fixed;top:0;left:0;right:0;bottom:0;touch-action:none}
   #join,#choose,#ctl{height:100%;flex-direction:column}
@@ -79,10 +83,15 @@
   <p>caça ao tesouro</p>
   <button class="big" id="goTV" autofocus>📺 Esta é a TV</button>
   <button class="big" id="goPad">📱 Sou um controle</button>
+  <button class="big" id="goX" style="background:#555">🏠 Explorar a casa</button>
 </div>
 
 <div id="tv" style="display:none"></div>
 <div id="hud" style="display:none"></div>
+<div id="explore" style="display:none">
+  <div id="xstick"><div id="xknob"></div></div>
+  <button id="xchar"></button>
+</div>
 
 <div id="pad" style="display:none">
   <div id="join" style="display:none">
@@ -123,11 +132,12 @@
     if (started) return; started = true;
     try { location.hash = mode; } catch (e) {}
     document.getElementById('menu').style.display = 'none';
-    if (mode === 'tv') { document.getElementById('hud').style.display = 'block'; GAME.start(); } else PAD.start();
+    if (mode === 'tv' || mode === 'explorar') { document.getElementById('hud').style.display = 'block'; GAME.start({ explore: mode === 'explorar' }); } else PAD.start();
   }
   document.getElementById('goTV').onclick = function(){ go('tv'); };
   document.getElementById('goPad').onclick = function(){ go('pad'); };
-  if (location.hash === '#tv') go('tv'); else if (location.hash === '#pad') go('pad');
+  document.getElementById('goX').onclick = function(){ go('explorar'); };
+  if (location.hash === '#tv') go('tv'); else if (location.hash === '#pad') go('pad'); else if (location.hash === '#explorar') go('explorar');
   else { try { document.getElementById('goTV').focus(); } catch (e) {} }
 </script>
 </body>

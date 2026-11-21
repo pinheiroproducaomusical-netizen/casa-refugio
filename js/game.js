@@ -10,7 +10,9 @@ var GAME = (function(){
   function $(id){ return document.getElementById(id); }
   function el(tag, cls, parent){ var e = document.createElement(tag); if (cls) e.className = cls; (parent || document.body).appendChild(e); return e; }
 
-  function start(){
+  var explore = false;
+  function start(opts){
+    explore = !!(opts && opts.explore);
     $('tv').style.display = 'block';
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setPixelRatio(1);
@@ -28,6 +30,7 @@ var GAME = (function(){
     buildHud();
     resize(); addEventListener('resize', resize);
     drawTvScreen();
+    if (explore) { startExplore(); requestAnimationFrame(loop); return; }
     connectBroker(null, onMsg, function(m, idx){
       if (!m) { hud.code.textContent = 'Sem conexão'; hud.lobbyMsg.textContent = 'Não consegui conectar ao servidor. Verifique a internet da TV e recarregue.'; return; }
       mq = m; code = String(idx + 1) + String(Math.floor(100 + Math.random() * 900));
@@ -35,6 +38,29 @@ var GAME = (function(){
       hud.code.textContent = code; dirty = true; drawTvScreen();
     }, function(){ hud.lobbyMsg.textContent = 'Conexão perdida — recarregue a página da TV.'; });
     requestAnimationFrame(loop);
+  }
+
+  function startExplore(){
+    var chIdx = 0, x = 0, y = 0, sid = null, stick = $('xstick'), knob = $('xknob');
+    $('explore').style.display = 'block';
+    function send(ch){ onMsg('l', JSON.stringify({ id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: false })); }
+    send();
+    setInterval(function(){ send(); }, 50);
+    function mv(cx, cy){ var r = stick.getBoundingClientRect(), dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2), max = r.width / 2 - 20, d = Math.sqrt(dx * dx + dy * dy); if (d > max) { dx *= max / d; dy *= max / d; } knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; x = dx / max; y = dy / max; }
+    function rel(){ sid = null; x = y = 0; knob.style.transform = ''; }
+    stick.addEventListener('touchstart', function(e){ e.preventDefault(); var t = e.changedTouches[0]; sid = t.identifier; mv(t.clientX, t.clientY); }, { passive: false });
+    stick.addEventListener('touchmove', function(e){ e.preventDefault(); for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === sid) mv(e.changedTouches[i].clientX, e.changedTouches[i].clientY); }, { passive: false });
+    stick.addEventListener('touchend', rel); stick.addEventListener('touchcancel', rel);
+    var down = false;
+    stick.addEventListener('mousedown', function(e){ down = true; mv(e.clientX, e.clientY); });
+    addEventListener('mousemove', function(e){ if (down) mv(e.clientX, e.clientY); });
+    addEventListener('mouseup', function(){ if (down) { down = false; rel(); } });
+    $('xchar').onclick = function(){
+      var p = slots[0]; chIdx = (chIdx + 1) % CHARS.list.length;
+      if (p) { setChar(p, CHARS.list[chIdx]); p.camInit = false; }
+      $('xchar').textContent = '👤 ' + CHARS.info[CHARS.list[chIdx]].name;
+    };
+    $('xchar').textContent = '👤 ' + CHARS.info[CHARS.list[0]].name;
   }
 
   function sparkleTex(){
@@ -210,9 +236,10 @@ var GAME = (function(){
 
   function updateHud(active, L){
     var lobby = phase === 'lobby';
-    hud.lobby.style.display = lobby ? 'block' : 'none';
+    hud.lobby.style.display = lobby && !explore ? 'block' : 'none';
     hud.panel.style.display = lobby ? 'none' : 'block';
     hud.small.textContent = code ? 'código ' + code : '';
+    if (explore) { hud.panel.style.display = 'none'; }
     var pr = L.panel; place(hud.panel, pr); place(hud.lobby, active.length ? pr : [innerWidth * 0.15, innerHeight * 0.1, innerWidth * 0.7, innerHeight * 0.8]);
     if (lobby) {
       if (active.length && !hud.lobby.querySelector('.who')) el('div', 'who', hud.lobby);
