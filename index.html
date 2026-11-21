@@ -44,6 +44,13 @@
   #xstick{position:absolute;left:24px;bottom:24px;width:170px;height:170px;border-radius:50%;background:rgba(20,24,32,.45);border:3px solid rgba(255,255,255,.35);pointer-events:auto;touch-action:none}
   #xknob{position:absolute;left:47px;top:47px;width:70px;height:70px;border-radius:50%;background:rgba(91,140,255,.85);pointer-events:none}
   #xchar{position:absolute;right:14px;top:14px;pointer-events:auto;font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:rgba(20,24,32,.7);color:#fff}
+  #xstart{position:absolute;left:14px;top:14px;pointer-events:auto;font-size:16px;padding:10px 14px;border-radius:12px;border:0;background:#2fbf71;color:#fff;font-weight:bold}
+  #xA{position:absolute;right:28px;bottom:40px;width:96px;height:96px;border-radius:50%;border:0;background:rgba(224,83,61,.9);color:#fff;font-size:32px;font-weight:bold;pointer-events:auto;touch-action:none}
+  #xA.down{filter:brightness(1.5)}
+  .panel.solo{padding:10px 12px}
+  .panel.solo .round{font-size:12px}.panel.solo .missing{font-size:19px;margin:4px 0 8px}
+  .panel.solo .hint{font-size:14px;padding:6px 8px;margin:6px 0}.panel.solo .next{font-size:11px}
+  .panel.solo .foundmsg{font-size:16px}.panel.solo .scores{font-size:14px;bottom:8px}
   /* ---------- PAD ---------- */
   #pad{position:fixed;top:0;left:0;right:0;bottom:0;touch-action:none}
   #join,#choose,#ctl{height:100%;flex-direction:column}
@@ -91,6 +98,8 @@
 <div id="explore" style="display:none">
   <div id="xstick"><div id="xknob"></div></div>
   <button id="xchar"></button>
+  <button id="xstart">▶ Começar o jogo</button>
+  <button id="xA">A</button>
 </div>
 
 <div id="pad" style="display:none">
@@ -119,13 +128,13 @@
 </div>
 
 <script src="lib/three.min.js"></script>
-<script src="js/net.js?v=4"></script>
-<script src="js/tex.js?v=4"></script>
-<script src="js/chars.js?v=4"></script>
-<script src="js/data.js?v=4"></script>
-<script src="js/house.js?v=4"></script>
-<script src="js/game.js?v=4"></script>
-<script src="js/pad.js?v=4"></script>
+<script src="js/net.js?v=5"></script>
+<script src="js/tex.js?v=5"></script>
+<script src="js/chars.js?v=5"></script>
+<script src="js/data.js?v=5"></script>
+<script src="js/house.js?v=5"></script>
+<script src="js/game.js?v=5"></script>
+<script src="js/pad.js?v=5"></script>
 <script>
   var started = false;
   function go(mode){

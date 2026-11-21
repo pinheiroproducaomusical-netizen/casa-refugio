@@ -41,9 +41,15 @@ var GAME = (function(){
   }
 
   function startExplore(){
-    var chIdx = 0, x = 0, y = 0, sid = null, stick = $('xstick'), knob = $('xknob');
+    var chIdx = 0, x = 0, y = 0, sid = null, stick = $('xstick'), knob = $('xknob'), aDown = false, st = 0;
     $('explore').style.display = 'block';
-    function send(ch){ onMsg('l', JSON.stringify({ id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: false })); }
+    function send(ch){ var m = { id: 'me', ch: ch || CHARS.list[chIdx], x: x, y: y, a: aDown }; if (st > 0) { m.st = 1; st--; } onMsg('l', JSON.stringify(m)); }
+    var xa = $('xA');
+    xa.addEventListener('touchstart', function(e){ e.preventDefault(); aDown = true; xa.classList.add('down'); }, { passive: false });
+    xa.addEventListener('touchend', function(){ aDown = false; xa.classList.remove('down'); });
+    xa.addEventListener('mousedown', function(){ aDown = true; }); xa.addEventListener('mouseup', function(){ aDown = false; });
+    $('xstart').onclick = function(){ st = 2; };
+    setInterval(function(){ $('xstart').style.display = (phase === 'lobby' || phase === 'end') ? 'block' : 'none'; $('xstart').textContent = phase === 'end' ? '▶ Jogar de novo' : '▶ Começar o jogo'; $('xchar').style.display = phase === 'lobby' ? 'block' : 'none'; }, 300);
     send();
     setInterval(function(){ send(); }, 50);
     function mv(cx, cy){ var r = stick.getBoundingClientRect(), dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2), max = r.width / 2 - 20, d = Math.sqrt(dx * dx + dy * dy); if (d > max) { dx *= max / d; dy *= max / d; } knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; x = dx / max; y = dy / max; }
@@ -239,7 +245,7 @@ var GAME = (function(){
     hud.lobby.style.display = lobby && !explore ? 'block' : 'none';
     hud.panel.style.display = lobby ? 'none' : 'block';
     hud.small.textContent = code ? 'código ' + code : '';
-    if (explore) { hud.panel.style.display = 'none'; }
+    if (explore) { hud.panel.style.display = lobby ? 'none' : 'block'; var pw = innerWidth > innerHeight; place(hud.panel, pw ? [innerWidth * 0.55, 0, innerWidth * 0.45, innerHeight * 0.62] : [0, 0, innerWidth, innerHeight * 0.36]); hud.panel.style.background = 'rgba(15,20,28,.72)'; hud.panel.className = 'panel game solo'; }
     var pr = L.panel; place(hud.panel, pr); place(hud.lobby, active.length ? pr : [innerWidth * 0.15, innerHeight * 0.1, innerWidth * 0.7, innerHeight * 0.8]);
     if (lobby) {
       if (active.length && !hud.lobby.querySelector('.who')) el('div', 'who', hud.lobby);
